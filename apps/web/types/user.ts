@@ -2,7 +2,7 @@ import type { Address } from 'viem'
 
 export interface UserBalance {
   native: bigint
-  usdc: bigint
+  usdce: bigint
 }
 
 export interface UserSession {
@@ -22,4 +22,5 @@ export interface UserState {
 export interface UserOperations {
   signOut: () => Promise<void>
   refreshBalance: () => Promise<void>
+  refreshSession: () => Promise<void>
 }

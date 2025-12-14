@@ -15,3 +15,6 @@ export {
   createSession,
   destroySession,
 } from './session'
+
+// Route protection wrappers
+export { withAuth, withOptionalAuth } from './withAuth'

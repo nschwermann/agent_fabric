@@ -34,6 +34,14 @@ let serverPublicKey: KeyObject | null = null
 let serverPrivateKey: KeyObject | null = null
 
 /**
+ * Normalize PEM key from environment variable.
+ * Handles escaped newlines (\n as literal string) and converts to actual newlines.
+ */
+function normalizePem(pem: string): string {
+  return pem.replace(/\\n/g, '\n')
+}
+
+/**
  * Get the server's RSA public key for client-side encryption.
  * The public key is loaded from SERVER_PUBLIC_KEY env var (PEM format).
  */
@@ -45,7 +53,7 @@ export function getServerPublicKey(): KeyObject {
     throw new Error('SERVER_PUBLIC_KEY environment variable is not set')
   }
 
-  serverPublicKey = createPublicKey(publicKeyPem)
+  serverPublicKey = createPublicKey(normalizePem(publicKeyPem))
   return serverPublicKey
 }
 
@@ -61,7 +69,7 @@ export function getServerPrivateKey(): KeyObject {
     throw new Error('SERVER_PRIVATE_KEY environment variable is not set')
   }
 
-  serverPrivateKey = createPrivateKey(privateKeyPem)
+  serverPrivateKey = createPrivateKey(normalizePem(privateKeyPem))
   return serverPrivateKey
 }
 

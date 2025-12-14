@@ -27,7 +27,6 @@ export interface ProxyFormState {
   data: ProxyFormData
   errors: ProxyFormErrors
   isSubmitting: boolean
-  isEncrypting: boolean
   isDirty: boolean
 }
 
