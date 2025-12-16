@@ -4,14 +4,24 @@ import { eq } from 'drizzle-orm'
 import { decryptHybrid, type HybridEncryptedData } from '@/lib/crypto/encryption'
 import {
   verifyPayment,
-  generatePaymentNonce,
-  buildPaymentRequiredHeaders,
+  settlePayment,
+  buildPaymentRequirements,
   getUsdceAddress,
-  getPaymentRecipient,
-  type PaymentVerificationRequest,
 } from '@/lib/x402'
+import { paymentNonceRepository } from '@/lib/repositories'
+import {
+  validateVariables,
+  substituteVariables,
+  extractVariables,
+  type VariableDefinition,
+} from '@/features/proxy/model/variables'
 
 type RouteParams = { params: Promise<{ id: string }> }
+
+function isUUID(str: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  return uuidRegex.test(str)
+}
 
 // Timeout for proxied requests (30 seconds)
 const PROXY_TIMEOUT_MS = 30_000
@@ -20,25 +30,27 @@ const PROXY_TIMEOUT_MS = 30_000
  * Main proxy endpoint that handles x402 payments.
  *
  * Flow:
- * 1. Check if payment header exists
+ * 1. Check if X-PAYMENT header exists
  * 2. If no payment -> return 402 with payment details
- * 3. If payment exists -> verify with facilitator
- * 4. If verified -> decrypt headers, proxy to target, return response
- * 5. Log request
+ * 3. If payment exists -> verify signature
+ * 4. Proxy request to target API
+ * 5. If target returns 2xx -> settle payment (transfer tokens)
+ * 6. If target returns error -> return error WITHOUT charging
  */
 async function handleProxyRequest(
   request: NextRequest,
   { params }: RouteParams
 ) {
   const { id } = await params
+  const isId = isUUID(id)
   let proxyId = id
-  let status: 'success' | 'payment_failed' | 'payment_required' | 'proxy_error' = 'proxy_error'
+  let status: 'success' | 'payment_failed' | 'payment_required' | 'proxy_error' | 'target_error' = 'proxy_error'
   let requesterWallet: string | null = null
 
   try {
-    // Get proxy configuration
+    // Get proxy configuration (support both UUID and slug)
     const proxy = await db.query.apiProxies.findFirst({
-      where: eq(apiProxies.id, id),
+      where: isId ? eq(apiProxies.id, id) : eq(apiProxies.slug, id),
     })
 
     if (!proxy) {
@@ -48,59 +60,87 @@ async function handleProxyRequest(
       )
     }
 
-    // Extract payment header
-    const paymentHeader = request.headers.get('X-402-Payment')
+    // Use the actual proxy ID for logging (in case we looked up by slug)
+    proxyId = proxy.id
 
-    // If no payment, return 402 Payment Required
-    if (!paymentHeader) {
+    // Get variables schema for this proxy
+    const variablesSchema = proxy.variablesSchema as VariableDefinition[] | null
+
+    // Read request body once (for non-GET requests)
+    let requestBodyText: string | null = null
+    if (request.method !== 'GET' && request.method !== 'HEAD') {
+      requestBodyText = await request.text()
+    }
+
+    // Extract variables from all sources (X-Variables header, query params, body)
+    const url = new URL(request.url)
+    const extractedVariables = extractVariables(request.headers, url.searchParams, requestBodyText ?? undefined)
+
+    // Validate variables against schema BEFORE checking payment (no charge for invalid requests!)
+    if (variablesSchema && variablesSchema.length > 0) {
+      const validation = validateVariables(variablesSchema, extractedVariables)
+      if (!validation.valid) {
+        // Return 400 Bad Request - NO CHARGE for invalid input
+        return NextResponse.json(
+          {
+            error: 'Variable validation failed',
+            details: validation.errors,
+            requiredVariables: variablesSchema.filter(v => v.required).map(v => ({
+              name: v.name,
+              type: v.type,
+              description: v.description,
+            })),
+          },
+          { status: 400 }
+        )
+      }
+    }
+
+    // Extract payment header (X-PAYMENT per Cronos x402 spec)
+    const paymentHeaderValue = request.headers.get('X-PAYMENT')
+
+    console.log('[Proxy] Received request for:', proxyId)
+    console.log('[Proxy] Payment header present:', !!paymentHeaderValue)
+
+    // If no payment, return 402 Payment Required (per Cronos x402 spec)
+    if (!paymentHeaderValue) {
       const chainId = parseInt(process.env.NEXT_PUBLIC_CRONOS_CHAIN_ID || '338', 10)
-      const nonce = await generatePaymentNonce()
 
-      const paymentHeaders = buildPaymentRequiredHeaders({
+      const paymentRequirements = buildPaymentRequirements({
         amount: proxy.pricePerRequest,
-        token: getUsdceAddress(chainId),
-        recipient: getPaymentRecipient(),
+        asset: getUsdceAddress(chainId),
+        recipient: proxy.paymentAddress,
         chainId,
-        nonce,
+        description: proxy.description ?? 'API access payment',
+        mimeType: 'application/json',
+        maxTimeoutSeconds: 300,
       })
+
+      console.log('[Proxy] Generating 402 response with paymentRequirements:', paymentRequirements)
 
       status = 'payment_required'
 
       // Log the request
       await logRequest(proxyId, requesterWallet, status)
 
-      return new NextResponse(
-        JSON.stringify({
-          error: 'Payment required',
-          message: 'This API requires payment via x402 protocol',
-        }),
-        {
-          status: 402,
-          headers: paymentHeaders,
-        }
-      )
-    }
-
-    // Parse and verify payment
-    let paymentData: PaymentVerificationRequest
-    try {
-      paymentData = JSON.parse(paymentHeader)
-      requesterWallet = paymentData.signature ? extractWalletFromSignature(paymentData.signature) : null
-    } catch {
-      status = 'payment_failed'
-      await logRequest(proxyId, requesterWallet, status)
-
+      // Per x402 spec: payment requirements go in response body
       return NextResponse.json(
-        { error: 'Invalid payment header format' },
-        { status: 400 }
+        { paymentRequirements },
+        { status: 402 }
       )
     }
 
-    // Verify payment
-    const isValid = await verifyPayment(paymentData)
+    // Verify payment signature (but don't settle yet)
+    console.log('[Proxy] Verifying payment signature...')
+    const paymentResult = await verifyPayment(
+      paymentHeaderValue,
+      proxy.pricePerRequest,
+      proxy.paymentAddress
+    )
 
-    if (!isValid) {
+    if (!paymentResult) {
       status = 'payment_failed'
+      console.log('[Proxy] Payment verification failed')
       await logRequest(proxyId, requesterWallet, status)
 
       return NextResponse.json(
@@ -109,23 +149,77 @@ async function handleProxyRequest(
       )
     }
 
-    // Payment verified - proxy the request
-    try {
-      const response = await proxyToTarget(request, proxy)
-      status = 'success'
-      await logRequest(proxyId, requesterWallet, status)
+    // Extract wallet address from verified payment
+    requesterWallet = paymentResult.address
+    console.log('[Proxy] Payment signature verified for wallet:', requesterWallet)
 
-      return response
+    // Proxy the request to target API
+    let targetResponse: {
+      status: number
+      statusText: string
+      body: ArrayBuffer
+      headers: Headers
+    }
+
+    try {
+      targetResponse = await proxyToTarget(request, proxy, {
+        extractedVariables,
+        variablesSchema: variablesSchema ?? [],
+        requestBodyText,
+      })
     } catch (error) {
       console.error('[Proxy] Error forwarding request:', error)
       status = 'proxy_error'
       await logRequest(proxyId, requesterWallet, status)
 
+      // Don't charge - proxy error is our fault
       return NextResponse.json(
         { error: 'Failed to proxy request to target' },
         { status: 502 }
       )
     }
+
+    // Check if target API returned success (2xx)
+    const isSuccess = targetResponse.status >= 200 && targetResponse.status < 300
+
+    if (isSuccess) {
+      // Target API succeeded - now settle the payment (charge the user)
+      console.log('[Proxy] Target API succeeded, settling payment...')
+
+      const settlement = await settlePayment(
+        paymentHeaderValue,
+        paymentResult.paymentHeader,
+        proxy.pricePerRequest,
+        proxy.paymentAddress
+      )
+
+      if (settlement) {
+        console.log('[Proxy] Payment settled! TxHash:', settlement.txHash)
+
+        // Mark nonce as used after successful settlement
+        await paymentNonceRepository.consume(paymentResult.paymentNonce)
+
+        status = 'success'
+      } else {
+        // Settlement failed but target API succeeded - this is a problem
+        // We should still return the response but log the issue
+        console.error('[Proxy] Payment settlement failed after successful API call!')
+        status = 'success' // Still mark as success since API worked
+      }
+    } else {
+      // Target API failed - DON'T charge the user
+      console.log('[Proxy] Target API returned error:', targetResponse.status, '- NOT charging user')
+      status = 'target_error'
+    }
+
+    await logRequest(proxyId, requesterWallet, status)
+
+    // Return the target API response (success or error)
+    return new NextResponse(targetResponse.body, {
+      status: targetResponse.status,
+      statusText: targetResponse.statusText,
+      headers: targetResponse.headers,
+    })
   } catch (error) {
     console.error('[Proxy] Unexpected error:', error)
     await logRequest(proxyId, requesterWallet, status)
@@ -137,16 +231,37 @@ async function handleProxyRequest(
   }
 }
 
+interface ProxyOptions {
+  extractedVariables: Record<string, unknown>
+  variablesSchema: VariableDefinition[]
+  requestBodyText: string | null
+}
+
+interface ProxyResponse {
+  status: number
+  statusText: string
+  body: ArrayBuffer
+  headers: Headers
+}
+
 /**
  * Proxy the request to the target URL.
+ * Returns the raw response data for the caller to decide what to do.
  */
 async function proxyToTarget(
   request: NextRequest,
   proxy: {
     targetUrl: string
     encryptedHeaders: unknown
-  }
-): Promise<NextResponse> {
+    httpMethod: string
+    requestBodyTemplate: string | null
+    queryParamsTemplate: string | null
+    contentType: string | null
+  },
+  options: ProxyOptions
+): Promise<ProxyResponse> {
+  const { extractedVariables, variablesSchema, requestBodyText } = options
+
   // Build headers for target request
   const targetHeaders = new Headers()
 
@@ -154,8 +269,6 @@ async function proxyToTarget(
   const safeHeaders = [
     'accept',
     'accept-language',
-    'content-type',
-    'content-length',
   ]
 
   for (const header of safeHeaders) {
@@ -164,6 +277,9 @@ async function proxyToTarget(
       targetHeaders.set(header, value)
     }
   }
+
+  // Set content type from proxy config (default to application/json)
+  targetHeaders.set('content-type', proxy.contentType ?? 'application/json')
 
   // Decrypt and add stored headers
   if (proxy.encryptedHeaders) {
@@ -178,10 +294,27 @@ async function proxyToTarget(
     }
   }
 
-  // Get request body if present
+  // Build request body
   let body: BodyInit | null = null
-  if (request.method !== 'GET' && request.method !== 'HEAD') {
-    body = await request.text()
+  const method = proxy.httpMethod || request.method
+
+  if (method !== 'GET' && method !== 'HEAD') {
+    // If proxy has a request body template, use it with variable substitution
+    if (proxy.requestBodyTemplate) {
+      body = substituteVariables(proxy.requestBodyTemplate, extractedVariables, variablesSchema)
+    } else if (requestBodyText) {
+      // Power mode: forward body as-is
+      body = requestBodyText
+    }
+  }
+
+  // Build target URL with query params substitution if configured
+  let targetUrl = proxy.targetUrl
+  if (proxy.queryParamsTemplate) {
+    const substitutedParams = substituteVariables(proxy.queryParamsTemplate, extractedVariables, variablesSchema)
+    // queryParamsTemplate is expected to be like "foo={{bar}}&baz={{qux}}"
+    const separator = targetUrl.includes('?') ? '&' : '?'
+    targetUrl = `${targetUrl}${separator}${substitutedParams}`
   }
 
   // Create abort controller for timeout
@@ -189,8 +322,8 @@ async function proxyToTarget(
   const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS)
 
   try {
-    const targetResponse = await fetch(proxy.targetUrl, {
-      method: request.method,
+    const targetResponse = await fetch(targetUrl, {
+      method,
       headers: targetHeaders,
       body,
       signal: controller.signal,
@@ -217,14 +350,15 @@ async function proxyToTarget(
       }
     })
 
-    // Return proxied response
+    // Return raw response data
     const responseBody = await targetResponse.arrayBuffer()
 
-    return new NextResponse(responseBody, {
+    return {
       status: targetResponse.status,
       statusText: targetResponse.statusText,
+      body: responseBody,
       headers: responseHeaders,
-    })
+    }
   } catch (error) {
     clearTimeout(timeoutId)
 
@@ -254,16 +388,6 @@ async function logRequest(
     // Don't fail the request if logging fails
     console.error('[Proxy] Failed to log request:', error)
   }
-}
-
-/**
- * Extract wallet address from payment signature (placeholder).
- * In production, this would recover the address from the signature.
- */
-function extractWalletFromSignature(signature: string): string | null {
-  // TODO: Implement proper signature recovery
-  // For now, return null
-  return null
 }
 
 // Export handlers for all HTTP methods

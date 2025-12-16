@@ -123,4 +123,17 @@
   body {
     @apply bg-background text-foreground;
   }
+  .container {
+    @apply px-4 sm:px-6 lg:px-8 mx-auto;
+  }
+  button, [role="button"] {
+    cursor: pointer;
+  }
+}
+
+/* Theme transition animation */
+::view-transition-old(root),
+::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
 }

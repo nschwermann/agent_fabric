@@ -22,6 +22,23 @@ function truncateAddress(address: string): string {
 }
 
 /**
+ * Format a number with abbreviations and limited decimals.
+ * e.g., 1000 = 1k, 1500000 = 1.5M
+ */
+function formatCompactNumber(value: string | number): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value
+  if (isNaN(num)) return '0'
+
+  if (num >= 1_000_000) {
+    return (num / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M'
+  }
+  if (num >= 1_000) {
+    return (num / 1_000).toFixed(2).replace(/\.?0+$/, '') + 'k'
+  }
+  return num.toFixed(3).replace(/\.?0+$/, '')
+}
+
+/**
  * Compact user status component showing wallet info with dropdown menu.
  * Shows "Sign In" button when not authenticated.
  */
@@ -81,7 +98,7 @@ export function UserStatus() {
           ) : (
             <Copy className="size-4" />
           )}
-          <span className="font-mono text-xs">{session.walletAddress}</span>
+          <span className="font-mono text-xs">{truncateAddress(session.walletAddress)}</span>
         </DropdownMenuItem>
         {formattedBalance && (
           <>
@@ -90,11 +107,11 @@ export function UserStatus() {
             <div className="px-2 py-1.5 text-sm">
               <div className="flex justify-between">
                 <span className="text-muted-foreground">USDC.E</span>
-                <span className="font-mono">{formattedBalance.usdce}</span>
+                <span className="font-mono">{formatCompactNumber(formattedBalance.usdce)}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Native</span>
-                <span className="font-mono">{formattedBalance.native}</span>
+                <span className="font-mono">{formatCompactNumber(formattedBalance.native)}</span>
               </div>
             </div>
           </>

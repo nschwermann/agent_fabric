@@ -4,6 +4,8 @@ import { headers } from "next/headers";
 import { cookieToInitialState } from "wagmi";
 import { config } from "@/config";
 import { Web3Provider } from "@/context";
+import { ThemeProvider } from "@/context/theme";
+import { Header } from "@/components/layout/Header";
 import "./globals.css";
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
@@ -19,7 +21,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "x402 Marketplace",
+  title: "Route 402",
   description: "Decentralized API marketplace with x402 payments on Cronos",
 };
 
@@ -34,11 +36,16 @@ export default async function RootLayout({
   );
 
   return (
-    <html lang="en" className={inter.variable}>
+    <html lang="en" className={inter.variable} suppressHydrationWarning>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <Web3Provider initialState={initialState}>{children}</Web3Provider>
+        <ThemeProvider>
+          <Web3Provider initialState={initialState}>
+            <Header />
+            <main className="min-h-[calc(100vh-3.5rem)]">{children}</main>
+          </Web3Provider>
+        </ThemeProvider>
       </body>
     </html>
   );

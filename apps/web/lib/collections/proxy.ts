@@ -10,6 +10,7 @@ import type { ProxyHeader } from '@/types'
 // Schema for stored proxy data (from server)
 export const proxySchema = z.object({
   id: z.string(),
+  slug: z.string().nullable(),
   name: z.string(),
   description: z.string().nullable(),
   proxyUrl: z.string(),
@@ -18,6 +19,14 @@ export const proxySchema = z.object({
   pricePerRequest: z.number(),
   isPublic: z.boolean(),
   hasEncryptedHeaders: z.boolean(),
+  category: z.string().nullable(),
+  tags: z.array(z.string()).default([]),
+  httpMethod: z.string().default('GET'),
+  requestBodyTemplate: z.string().nullable(),
+  queryParamsTemplate: z.string().nullable(),
+  variablesSchema: z.array(z.any()).default([]),
+  exampleResponse: z.string().nullable(),
+  contentType: z.string().default('application/json'),
   createdAt: z.string(),
 })
 
@@ -26,12 +35,21 @@ export type Proxy = z.infer<typeof proxySchema>
 // Input type for creating/updating proxies (before encryption)
 export interface ProxyInput {
   name: string
+  slug?: string
   description?: string
   paymentAddress: string
   targetUrl: string
   headers?: ProxyHeader[]
   pricePerRequest: number
   isPublic: boolean
+  category?: string
+  tags?: string[]
+  httpMethod?: string
+  requestBodyTemplate?: string
+  queryParamsTemplate?: string
+  variablesSchema?: unknown[]
+  exampleResponse?: string
+  contentType?: string
 }
 
 // Helper to convert headers array to encrypted format - exported for direct API calls
@@ -51,12 +69,21 @@ export async function prepareProxyPayload(input: ProxyInput) {
 
   return {
     name: input.name.trim(),
+    slug: input.slug?.trim() || null,
     description: input.description?.trim() || undefined,
     paymentAddress: input.paymentAddress,
     targetUrl: input.targetUrl.trim(),
     encryptedHeaders,
     pricePerRequest: input.pricePerRequest,
     isPublic: input.isPublic,
+    category: input.category || null,
+    tags: input.tags || [],
+    httpMethod: input.httpMethod || 'GET',
+    requestBodyTemplate: input.requestBodyTemplate || null,
+    queryParamsTemplate: input.queryParamsTemplate || null,
+    variablesSchema: input.variablesSchema || [],
+    exampleResponse: input.exampleResponse || null,
+    contentType: input.contentType || 'application/json',
   }
 }
 

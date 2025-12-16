@@ -1,0 +1,27 @@
+{
+  "version": "7",
+  "dialect": "postgresql",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1765689613886,
+      "tag": "0000_talented_shape",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1765700595328,
+      "tag": "0001_low_speedball",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1765703732133,
+      "tag": "0002_aberrant_star_brand",
+      "breakpoints": true
+    }
+  ]
+}

@@ -1,7 +1,9 @@
 'use client'
 
 import { useForm } from '@tanstack/react-form'
+import { useQueryClient } from '@tanstack/react-query'
 import { proxyFormSchema, defaultValues, type ProxyFormValues } from './schema'
+import type { VariableDefinition } from './variables'
 import {
   prepareProxyPayload,
   proxyQueryClient,
@@ -17,6 +19,7 @@ interface UseProxyFormOptions {
 
 export function useProxyForm(options: UseProxyFormOptions = {}) {
   const { initialValues, proxyId, onSuccess } = options
+  const queryClient = useQueryClient()
 
   const form = useForm({
     defaultValues: {
@@ -32,12 +35,21 @@ export function useProxyForm(options: UseProxyFormOptions = {}) {
 
       const input: ProxyInput = {
         name: value.name.trim(),
+        slug: value.slug?.trim() || undefined,
         description: value.description?.trim() || undefined,
         paymentAddress: value.paymentAddress,
         targetUrl: value.targetUrl.trim(),
         headers: value.headers.filter((h) => h.key && h.value),
         pricePerRequest: priceInSmallestUnit,
         isPublic: value.isPublic,
+        category: value.category || undefined,
+        tags: value.tags,
+        httpMethod: value.httpMethod,
+        requestBodyTemplate: value.requestBodyTemplate || undefined,
+        queryParamsTemplate: value.queryParamsTemplate || undefined,
+        variablesSchema: value.variablesSchema,
+        exampleResponse: value.exampleResponse || undefined,
+        contentType: value.contentType,
       }
 
       // Prepare payload with encryption
@@ -71,12 +83,14 @@ export function useProxyForm(options: UseProxyFormOptions = {}) {
         const newProxy = await response.json()
         // Invalidate queries to refetch fresh data
         await proxyQueryClient.invalidateQueries({ queryKey: PROXY_QUERY_KEY })
+        await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
         onSuccess?.(newProxy.id)
         return
       }
 
       // Invalidate queries to refetch fresh data
       await proxyQueryClient.invalidateQueries({ queryKey: PROXY_QUERY_KEY })
+      await queryClient.invalidateQueries({ queryKey: ['dashboard'] })
       onSuccess?.(proxyId)
     },
   })
@@ -95,10 +109,61 @@ export function useProxyForm(options: UseProxyFormOptions = {}) {
     )
   }
 
+  // Variable management helpers
+  const addVariable = (variable?: Partial<VariableDefinition>) => {
+    const currentVars = form.getFieldValue('variablesSchema') ?? []
+    const newVar: VariableDefinition = {
+      name: variable?.name ?? '',
+      type: variable?.type ?? 'string',
+      description: variable?.description ?? '',
+      required: variable?.required ?? false,
+      default: variable?.default,
+      example: variable?.example,
+      validation: variable?.validation,
+    }
+    form.setFieldValue('variablesSchema', [...currentVars, newVar])
+  }
+
+  // Add multiple variables at once (from template detection)
+  const addVariablesByName = (names: string[]) => {
+    const currentVars = form.getFieldValue('variablesSchema') ?? []
+    const existingNames = new Set(currentVars.map((v) => v.name))
+    const newVars = names
+      .filter((name) => !existingNames.has(name))
+      .map((name): VariableDefinition => ({
+        name,
+        type: 'string',
+        description: '',
+        required: false,
+      }))
+    if (newVars.length > 0) {
+      form.setFieldValue('variablesSchema', [...currentVars, ...newVars])
+    }
+  }
+
+  const removeVariable = (index: number) => {
+    const currentVars = form.getFieldValue('variablesSchema') ?? []
+    form.setFieldValue(
+      'variablesSchema',
+      currentVars.filter((_, i) => i !== index)
+    )
+  }
+
+  const updateVariable = (index: number, updates: Partial<VariableDefinition>) => {
+    const currentVars = form.getFieldValue('variablesSchema') ?? []
+    const updated = [...currentVars]
+    updated[index] = { ...updated[index], ...updates }
+    form.setFieldValue('variablesSchema', updated)
+  }
+
   return {
     form,
     addHeader,
     removeHeader,
+    addVariable,
+    addVariablesByName,
+    removeVariable,
+    updateVariable,
     isEditing: !!proxyId,
   }
 }

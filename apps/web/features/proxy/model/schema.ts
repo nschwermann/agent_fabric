@@ -1,4 +1,6 @@
 import { z } from 'zod'
+import { CATEGORIES, MAX_TAGS, type CategoryId } from './tags'
+import { HTTP_METHODS, VARIABLE_TYPES } from './variables'
 
 const BLOCKED_HOSTS = ['localhost', '127.0.0.1', '0.0.0.0', '::1', '[::1]']
 
@@ -21,11 +23,37 @@ export const proxyHeaderSchema = z.object({
   value: z.string(),
 })
 
+export const variableValidationSchema = z.object({
+  minLength: z.number().optional(),
+  maxLength: z.number().optional(),
+  pattern: z.string().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  enum: z.array(z.unknown()).optional(),
+})
+
+export const variableDefinitionSchema = z.object({
+  name: z.string().min(1, 'Variable name is required').regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/, 'Invalid variable name'),
+  type: z.enum(VARIABLE_TYPES),
+  description: z.string(),
+  required: z.boolean(),
+  default: z.unknown().optional(),
+  example: z.unknown().optional(),
+  validation: variableValidationSchema.optional(),
+})
+
 export const proxyFormSchema = z.object({
   name: z
     .string()
     .min(1, 'Name is required')
     .max(100, 'Name must be 100 characters or less'),
+
+  slug: z
+    .string()
+    .max(100, 'Slug must be 100 characters or less')
+    .regex(/^[a-z0-9-]*$/, 'Slug can only contain lowercase letters, numbers, and hyphens')
+    .optional()
+    .or(z.literal('')),
 
   description: z
     .string()
@@ -85,6 +113,31 @@ export const proxyFormSchema = z.object({
   headers: z.array(proxyHeaderSchema),
 
   isPublic: z.boolean(),
+
+  category: z
+    .string()
+    .refine((val) => val === '' || Object.keys(CATEGORIES).includes(val), {
+      message: 'Invalid category',
+    }),
+
+  tags: z
+    .array(z.string().min(1).max(50))
+    .max(MAX_TAGS, `Maximum ${MAX_TAGS} tags allowed`)
+    .refine((tags) => new Set(tags).size === tags.length, {
+      message: 'Duplicate tags are not allowed',
+    }),
+
+  httpMethod: z.enum(HTTP_METHODS),
+
+  requestBodyTemplate: z.string().max(50000, 'Request body template too large'),
+
+  queryParamsTemplate: z.string().max(2000, 'Query params template too large'),
+
+  variablesSchema: z.array(variableDefinitionSchema),
+
+  exampleResponse: z.string().max(50000, 'Example response too large'),
+
+  contentType: z.string().max(100, 'Content type too long'),
 })
 
 export type ProxyFormValues = z.infer<typeof proxyFormSchema>
@@ -92,10 +145,19 @@ export type ProxyHeader = z.infer<typeof proxyHeaderSchema>
 
 export const defaultValues: ProxyFormValues = {
   name: '',
+  slug: '',
   description: '',
   paymentAddress: '',
   targetUrl: '',
   pricePerRequest: '',
   headers: [],
   isPublic: false,
+  category: '',
+  tags: [],
+  httpMethod: 'GET',
+  requestBodyTemplate: '',
+  queryParamsTemplate: '',
+  variablesSchema: [],
+  exampleResponse: '',
+  contentType: 'application/json',
 }

@@ -1,4 +1,27 @@
 import { z } from 'zod'
+import { CATEGORIES, MAX_TAGS } from '@/features/proxy/model/tags'
+import { HTTP_METHODS, VARIABLE_TYPES } from '@/features/proxy/model/variables'
+
+const validCategoryIds = Object.keys(CATEGORIES)
+
+const variableValidationSchema = z.object({
+  minLength: z.number().optional(),
+  maxLength: z.number().optional(),
+  pattern: z.string().optional(),
+  min: z.number().optional(),
+  max: z.number().optional(),
+  enum: z.array(z.unknown()).optional(),
+}).optional()
+
+const variableDefinitionSchema = z.object({
+  name: z.string().min(1).regex(/^[a-zA-Z_][a-zA-Z0-9_]*$/),
+  type: z.enum(VARIABLE_TYPES),
+  description: z.string(),
+  required: z.boolean(),
+  default: z.unknown().optional(),
+  example: z.unknown().optional(),
+  validation: variableValidationSchema,
+})
 
 /**
  * Validates that a URL is safe to proxy to (prevents SSRF attacks).
@@ -80,11 +103,20 @@ export const createProxySchema = z.object({
     .min(1, 'Name is required')
     .max(100, 'Name must be 100 characters or less')
     .trim(),
+  slug: z
+    .string()
+    .max(100, 'Slug must be 100 characters or less')
+    .regex(/^[a-z0-9-]*$/, 'Slug can only contain lowercase letters, numbers, and hyphens')
+    .nullable()
+    .optional(),
   description: z
     .string()
     .max(1000, 'Description must be 1000 characters or less')
     .trim()
     .optional(),
+  paymentAddress: z
+    .string()
+    .regex(/^0x[a-fA-F0-9]{40}$/, 'Invalid Ethereum address'),
   targetUrl: safeTargetUrl,
   headers: z
     .record(z.string(), z.string())
@@ -106,6 +138,33 @@ export const createProxySchema = z.object({
     .min(0, 'Price cannot be negative')
     .max(1_000_000_000_000, 'Price exceeds maximum'), // Max ~1M USDC
   isPublic: z.boolean().default(false),
+  category: z
+    .string()
+    .max(50, 'Category must be 50 characters or less')
+    .refine((val) => val === '' || val === null || validCategoryIds.includes(val), {
+      message: 'Invalid category',
+    })
+    .nullable()
+    .optional(),
+  tags: z
+    .array(
+      z
+        .string()
+        .min(1, 'Tag cannot be empty')
+        .max(50, 'Tag must be 50 characters or less')
+        .regex(/^[a-z0-9-]+$/, 'Tags must be lowercase alphanumeric with hyphens')
+    )
+    .max(MAX_TAGS, `Maximum ${MAX_TAGS} tags allowed`)
+    .refine((tags) => new Set(tags).size === tags.length, {
+      message: 'Duplicate tags are not allowed',
+    })
+    .default([]),
+  httpMethod: z.enum(HTTP_METHODS).default('GET'),
+  requestBodyTemplate: z.string().max(50000).nullable().optional(),
+  queryParamsTemplate: z.string().max(2000).nullable().optional(),
+  variablesSchema: z.array(variableDefinitionSchema).default([]),
+  exampleResponse: z.string().max(50000).nullable().optional(),
+  contentType: z.string().max(100).default('application/json'),
 })
 
 /**

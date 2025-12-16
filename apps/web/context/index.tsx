@@ -20,7 +20,7 @@ import { UserProvider } from './user'
 
 // App metadata
 const metadata = {
-  name: 'x402 Marketplace',
+  name: 'Route 402',
   description: 'Decentralized API marketplace with x402 payments on Cronos',
   url: typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000',
   icons: ['/icon.png'],

@@ -1,10 +1,15 @@
 export {
   verifyPayment,
+  settlePayment,
+  verifyPaymentWithFacilitator,
+  parsePaymentHeader,
   generatePaymentNonce,
   isPaymentNonceUsed,
-  buildPaymentRequiredHeaders,
+  buildPaymentRequirements,
   getUsdceAddress,
   getPaymentRecipient,
-  type PaymentVerificationRequest,
+  type PaymentPayload,
+  type PaymentHeader,
   type PaymentDetails,
+  type PaymentRequirements,
 } from './verify'
