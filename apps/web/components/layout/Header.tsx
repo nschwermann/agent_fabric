@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Plus, LayoutDashboard, Store } from 'lucide-react'
+import { Plus, LayoutDashboard, Store, Banknote } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { UserStatus } from '@/features/user/view/UserStatus'
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils'
 
 const navLinks = [
   { href: '/', label: 'Explore', icon: Store },
+  { href: '/pay', label: 'Pay', icon: Banknote },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, authRequired: true },
 ]
 

@@ -2,23 +2,16 @@
 
 import { useState, useCallback } from 'react'
 import { useSignTypedData, useConnection } from 'wagmi'
-import { type Address, toHex, hashTypedData, recoverTypedDataAddress } from 'viem'
+import { type Address, hashTypedData, recoverTypedDataAddress } from 'viem'
 import type { VariableDefinition, VariableType } from '@/features/proxy/model/variables'
-
-/**
- * EIP-3009 TransferWithAuthorization typed data structure
- * Used by USDX and other tokens that support gasless transfers
- */
-const EIP3009_TYPES = {
-  TransferWithAuthorization: [
-    { name: 'from', type: 'address' },
-    { name: 'to', type: 'address' },
-    { name: 'value', type: 'uint256' },
-    { name: 'validAfter', type: 'uint256' },
-    { name: 'validBefore', type: 'uint256' },
-    { name: 'nonce', type: 'bytes32' },
-  ],
-} as const
+import {
+  EIP3009_TYPES,
+  buildUsdceDomain,
+  buildEIP3009Message,
+  buildPaymentHeader,
+  encodePaymentHeader,
+  parseChainId,
+} from '@/lib/x402/client'
 
 /**
  * Payment requirements per Cronos x402 spec
@@ -115,31 +108,6 @@ function convertVariables(
 }
 
 /**
- * Generate a random 32-byte nonce for EIP-3009 authorization
- */
-function generateNonce(): `0x${string}` {
-  const bytes = new Uint8Array(32)
-  crypto.getRandomValues(bytes)
-  return toHex(bytes)
-}
-
-/**
- * Build EIP-712 domain for the USDC.e token contract on Cronos
- * Verified by testing against the contract's transferWithAuthorization
- *
- * IMPORTANT: The chainId MUST be passed as a number (not BigInt or string)
- * to match how viem/wagmi encodes EIP-712 domains.
- */
-function buildTokenDomain(tokenAddress: Address, chainId: number) {
-  return {
-    name: 'Bridged USDC (Stargate)',
-    version: '1',
-    chainId: chainId,
-    verifyingContract: tokenAddress,
-  } as const
-}
-
-/**
  * Hook for executing API requests with x402 payment
  * Handles EIP-3009 TransferWithAuthorization signing
  */
@@ -174,15 +142,6 @@ export function useApiTryIt({
   }, [])
 
   /**
-   * Parse chain ID from network string (per Cronos x402 spec)
-   */
-  const parseChainId = (network: string): number => {
-    if (network === 'cronos-testnet') return 338
-    if (network === 'cronos') return 25
-    throw new Error(`Unknown network: ${network}`)
-  }
-
-  /**
    * Sign EIP-3009 TransferWithAuthorization and create payment header
    * Per Cronos x402 spec: https://docs.cronos.org/cronos-x402-facilitator/quick-start-for-buyers
    */
@@ -190,28 +149,19 @@ export function useApiTryIt({
     requirements: PaymentRequirements,
     from: Address
   ): Promise<string> => {
-    const { payTo, asset, maxAmountRequired, maxTimeoutSeconds, scheme, network } = requirements
+    const { payTo, asset, maxAmountRequired, maxTimeoutSeconds, network } = requirements
     const chainId = parseChainId(network)
 
-    const domain = buildTokenDomain(asset, chainId)
+    // Build EIP-712 domain using shared utility
+    const domain = buildUsdceDomain(asset, chainId)
 
-    // Generate random 32-byte nonce (per Cronos docs)
-    const nonce = generateNonce()
-
-    // Calculate validity window (per Cronos docs - use seconds, not milliseconds)
-    const validAfter = 0
-    const validBefore = Math.floor(Date.now() / 1000) + maxTimeoutSeconds
-
-    // EIP-3009 authorization message (per Cronos x402 spec)
-    // viem requires BigInt for uint256 types
-    const message = {
+    // Build EIP-3009 message using shared utility
+    const message = buildEIP3009Message({
       from,
       to: payTo,
       value: BigInt(maxAmountRequired),
-      validAfter: BigInt(validAfter),
-      validBefore: BigInt(validBefore),
-      nonce,
-    }
+      validitySeconds: maxTimeoutSeconds,
+    })
 
     console.log('[x402 Client] Signing payment with domain:', domain)
     console.log('[x402 Client] Signing payment with message:', {
@@ -229,13 +179,9 @@ export function useApiTryIt({
     })
 
     console.log('[x402 Client] Signature:', signature)
+    console.log('[x402 Client] Nonce:', message.nonce)
 
-    // Debug: Log nonce details
-    const nonceWithoutPrefix = nonce.slice(2)
-    console.log('[x402 Client] Nonce length (hex chars):', nonceWithoutPrefix.length, '(should be 64 for 32 bytes)')
-    console.log('[x402 Client] Nonce:', nonce)
-
-    // Verify the signature locally before sending
+    // Debug: Verify the signature locally before sending
     try {
       const hash = hashTypedData({
         domain,
@@ -259,28 +205,18 @@ export function useApiTryIt({
       console.error('[x402 Client] Local verification failed:', verifyError)
     }
 
-    // Construct payment header per Cronos x402 spec
-    const paymentHeader = {
-      x402Version: 1,
-      scheme: scheme,
-      network: network,
-      payload: {
-        from: from,
-        to: payTo,
-        value: maxAmountRequired,
-        validAfter: validAfter,
-        validBefore: validBefore,
-        nonce: nonce,
-        signature: signature,
-        asset: asset,
-      },
-    }
+    // Build payment header using shared utility
+    const header = buildPaymentHeader({
+      message,
+      signature,
+      asset,
+      chainId,
+    })
 
-    console.log('[x402 Client] Payment header:', JSON.stringify(paymentHeader, null, 2))
+    console.log('[x402 Client] Payment header:', JSON.stringify(header, null, 2))
 
-    // Base64-encode the payment header (per Cronos x402 spec)
-    const base64Header = Buffer.from(JSON.stringify(paymentHeader)).toString('base64')
-    return base64Header
+    // Encode to base64 using shared utility
+    return encodePaymentHeader(header)
   }, [signTypedData])
 
   /**
