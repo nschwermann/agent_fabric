@@ -1,5 +1,7 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, bigint, jsonb } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, boolean, bigint, jsonb, index } from 'drizzle-orm/pg-core'
 import type { VariableDefinition } from '@/features/proxy/model/variables'
+import type { HybridEncryptedData } from '@/lib/crypto/encryption'
+import type { SerializedSessionScope, OnChainParams } from '@/lib/sessionKeys/types'
 
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -53,6 +55,180 @@ export const requestLogs = pgTable('request_logs', {
   timestamp: timestamp('timestamp', { withTimezone: true }).defaultNow().notNull(),
 })
 
+/**
+ * Session keys for ERC-7702 smart account delegated signing
+ *
+ * Stores encrypted session key private keys that the server can use
+ * to sign x402 payments on behalf of the user.
+ */
+export const sessionKeys = pgTable('session_keys', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  // Session identification (from on-chain grantSession event)
+  sessionId: varchar('session_id', { length: 66 }).notNull().unique(), // bytes32 as hex (0x + 64 chars)
+  sessionKeyAddress: varchar('session_key_address', { length: 42 }).notNull(), // The session key's address
+
+  // Encrypted private key (using RSA+AES hybrid encryption)
+  encryptedPrivateKey: jsonb('encrypted_private_key').$type<HybridEncryptedData>().notNull(),
+
+  // === NEW: Scoped permissions ===
+  /**
+   * Scopes define what this session can do
+   * Contains both execute scopes (budget enforceable) and eip712 scopes (not enforceable)
+   */
+  scopes: jsonb('scopes').$type<SerializedSessionScope[]>().default([]),
+
+  /**
+   * Flattened on-chain parameters derived from scopes
+   * These are the values passed to grantSession and stored for quick access
+   */
+  onChainParams: jsonb('on_chain_params').$type<OnChainParams>(),
+
+  // === LEGACY: Kept for backwards compatibility ===
+  // Session parameters (for reference/display, source of truth is on-chain)
+  allowedTargets: jsonb('allowed_targets').$type<string[]>().notNull().default([]),
+  allowedSelectors: jsonb('allowed_selectors').$type<string[]>().default([]),
+
+  // Time bounds (stored for quick filtering, source of truth is on-chain)
+  validAfter: timestamp('valid_after', { withTimezone: true }).notNull(),
+  validUntil: timestamp('valid_until', { withTimezone: true }).notNull(),
+
+  // Approved contracts for EIP-1271 signatures (149-byte signature format)
+  // These are the only contracts this session key can sign EIP-712 messages for
+  approvedContracts: jsonb('approved_contracts').$type<{
+    address: string // Contract address
+    name?: string // Optional display name (e.g., "USDC.e", "Seaport")
+  }[]>().default([]),
+
+  // === OAuth binding (if created via OAuth flow) ===
+  oauthClientId: varchar('oauth_client_id', { length: 100 }),
+  oauthGrantId: varchar('oauth_grant_id', { length: 100 }),
+
+  // Status
+  isActive: boolean('is_active').default(true).notNull(),
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+// ============================================================================
+// OAuth 2.1 Tables for MCP Integration
+// ============================================================================
+
+/**
+ * OAuth 2.1 clients (MCP servers that want to request sessions)
+ */
+export const oauthClients = pgTable('oauth_clients', {
+  /** Client ID - public identifier */
+  id: varchar('id', { length: 100 }).primaryKey(),
+
+  /** Hashed client secret (bcrypt or argon2) */
+  secretHash: varchar('secret_hash', { length: 128 }).notNull(),
+
+  /** Human-readable name shown in consent UI */
+  name: varchar('name', { length: 100 }).notNull(),
+
+  /** Description of what this client does */
+  description: text('description'),
+
+  /** Logo URL for consent UI */
+  logoUrl: text('logo_url'),
+
+  /** Allowed redirect URIs (JSON array) */
+  redirectUris: jsonb('redirect_uris').$type<string[]>().notNull(),
+
+  /** Scope IDs this client is allowed to request */
+  allowedScopes: jsonb('allowed_scopes').$type<string[]>().notNull(),
+
+  /** Whether this client is active */
+  isActive: boolean('is_active').default(true).notNull(),
+
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
+/**
+ * OAuth authorization codes (short-lived, one-time use)
+ */
+export const oauthAuthCodes = pgTable('oauth_auth_codes', {
+  /** The authorization code */
+  code: varchar('code', { length: 128 }).primaryKey(),
+
+  /** Client that initiated the flow */
+  clientId: varchar('client_id', { length: 100 }).references(() => oauthClients.id).notNull(),
+
+  /** User who approved the request */
+  userId: uuid('user_id').references(() => users.id).notNull(),
+
+  /** Scopes that were requested */
+  requestedScopes: jsonb('requested_scopes').$type<string[]>().notNull(),
+
+  /** Scopes that were approved by the user */
+  approvedScopes: jsonb('approved_scopes').$type<string[]>().notNull(),
+
+  /** Full session configuration approved by user */
+  sessionConfig: jsonb('session_config').$type<{
+    validAfter: number
+    validUntil: number
+    scopes: SerializedSessionScope[]
+    sessionId: string // Links to the actual session key
+  }>().notNull(),
+
+  /** PKCE code challenge */
+  codeChallenge: varchar('code_challenge', { length: 128 }).notNull(),
+
+  /** PKCE challenge method (always S256) */
+  codeChallengeMethod: varchar('code_challenge_method', { length: 10 }).default('S256').notNull(),
+
+  /** Redirect URI for this specific request */
+  redirectUri: text('redirect_uri').notNull(),
+
+  /** When this code expires (typically 10 minutes) */
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+
+  /** When this code was used (null if not yet used) */
+  usedAt: timestamp('used_at', { withTimezone: true }),
+}, (table) => [
+  index('idx_oauth_auth_codes_expiry').on(table.expiresAt),
+])
+
+/**
+ * OAuth access tokens (bound to sessions)
+ */
+export const oauthAccessTokens = pgTable('oauth_access_tokens', {
+  id: uuid('id').defaultRandom().primaryKey(),
+
+  /** Hashed token value for storage */
+  tokenHash: varchar('token_hash', { length: 128 }).notNull().unique(),
+
+  /** Client that obtained this token */
+  clientId: varchar('client_id', { length: 100 }).references(() => oauthClients.id).notNull(),
+
+  /** User who owns this token */
+  userId: uuid('user_id').references(() => users.id).notNull(),
+
+  /** Session key this token can control */
+  sessionKeyId: uuid('session_key_id').references(() => sessionKeys.id).notNull(),
+
+  /** Scopes granted to this token */
+  scopes: jsonb('scopes').$type<string[]>().notNull(),
+
+  /** When this token expires */
+  expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+
+  /** When this token was revoked (null if active) */
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_oauth_access_tokens_session').on(table.sessionKeyId),
+])
+
 // Type exports for use in application code
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -62,3 +238,15 @@ export type NewApiProxy = typeof apiProxies.$inferInsert
 
 export type RequestLog = typeof requestLogs.$inferSelect
 export type NewRequestLog = typeof requestLogs.$inferInsert
+
+export type SessionKey = typeof sessionKeys.$inferSelect
+export type NewSessionKey = typeof sessionKeys.$inferInsert
+
+export type OAuthClient = typeof oauthClients.$inferSelect
+export type NewOAuthClient = typeof oauthClients.$inferInsert
+
+export type OAuthAuthCode = typeof oauthAuthCodes.$inferSelect
+export type NewOAuthAuthCode = typeof oauthAuthCodes.$inferInsert
+
+export type OAuthAccessToken = typeof oauthAccessTokens.$inferSelect
+export type NewOAuthAccessToken = typeof oauthAccessTokens.$inferInsert

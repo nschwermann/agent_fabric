@@ -5,7 +5,7 @@ import { useConnection, useBalance, useDisconnect, useReadContract } from 'wagmi
 import { erc20Abi, type Address } from 'viem'
 import type { UserContextValue } from './types'
 import type { UserBalance, UserSession } from '@/types'
-import { getUsdceConfig } from '@/config/tokens'
+import { getUsdceConfigSafe } from '@/config/tokens'
 import { SESSION_CREATED_EVENT, SESSION_DESTROYED_EVENT } from '@/context'
 
 const UserContext = createContext<UserContextValue | null>(null)
@@ -68,8 +68,8 @@ export function UserProvider({ children }: { children: ReactNode }) {
     }
   }, [checkServerSession])
 
-  // Get USDC.E address for current chain
-  const usdceAddress = chainId ? getUsdceConfig(chainId).address : undefined
+  // Get USDC.E address for current chain (returns null for unsupported chains)
+  const usdceAddress = chainId ? getUsdceConfigSafe(chainId)?.address : undefined
 
   // Native balance (CRO)
   const {

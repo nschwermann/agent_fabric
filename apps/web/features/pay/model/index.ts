@@ -1,4 +1,5 @@
 export { usePayment } from './usePayment'
+export { useSessionPayment, type UseSessionPaymentReturn } from './useSessionPayment'
 export { usePayLinkGenerator } from './usePayLinkGenerator'
 export type {
   PaymentStatus,

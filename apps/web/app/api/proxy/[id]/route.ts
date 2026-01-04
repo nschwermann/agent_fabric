@@ -7,8 +7,9 @@ import {
   settlePayment,
   buildPaymentRequirements,
   getUsdceAddress,
-} from '@/lib/x402'
+} from '@/lib/facilitator'
 import { paymentNonceRepository } from '@/lib/repositories'
+import type { Address } from 'viem'
 import {
   validateVariables,
   substituteVariables,
@@ -109,7 +110,7 @@ async function handleProxyRequest(
       const paymentRequirements = buildPaymentRequirements({
         amount: proxy.pricePerRequest,
         asset: getUsdceAddress(chainId),
-        recipient: proxy.paymentAddress,
+        recipient: proxy.paymentAddress as Address,
         chainId,
         description: proxy.description ?? 'API access payment',
         mimeType: 'application/json',
@@ -135,7 +136,7 @@ async function handleProxyRequest(
     const paymentResult = await verifyPayment(
       paymentHeaderValue,
       proxy.pricePerRequest,
-      proxy.paymentAddress
+      proxy.paymentAddress as Address
     )
 
     if (!paymentResult) {
@@ -190,7 +191,7 @@ async function handleProxyRequest(
         paymentHeaderValue,
         paymentResult.paymentHeader,
         proxy.pricePerRequest,
-        proxy.paymentAddress
+        proxy.paymentAddress as Address
       )
 
       if (settlement) {
@@ -201,10 +202,15 @@ async function handleProxyRequest(
 
         status = 'success'
       } else {
-        // Settlement failed but target API succeeded - this is a problem
-        // We should still return the response but log the issue
-        console.error('[Proxy] Payment settlement failed after successful API call!')
-        status = 'success' // Still mark as success since API worked
+        // Settlement failed - DO NOT return the API response (user didn't pay)
+        console.error('[Proxy] Payment settlement failed - not returning API response')
+        status = 'payment_failed'
+        await logRequest(proxyId, requesterWallet, status)
+
+        return NextResponse.json(
+          { error: 'Payment settlement failed. Please try again.' },
+          { status: 402 }
+        )
       }
     } else {
       // Target API failed - DON'T charge the user
@@ -331,9 +337,13 @@ async function proxyToTarget(
 
     clearTimeout(timeoutId)
 
-    // Build response headers (filter out hop-by-hop headers)
+    // Build response headers (filter out hop-by-hop headers and encoding headers)
+    // Note: content-encoding and content-length must be removed because:
+    // 1. arrayBuffer() automatically decompresses the response body
+    // 2. The original content-length is wrong after decompression
     const responseHeaders = new Headers()
-    const hopByHopHeaders = [
+    const filteredHeaders = [
+      // Hop-by-hop headers
       'connection',
       'keep-alive',
       'proxy-authenticate',
@@ -342,10 +352,13 @@ async function proxyToTarget(
       'trailers',
       'transfer-encoding',
       'upgrade',
+      // Encoding headers (body is already decompressed)
+      'content-encoding',
+      'content-length',
     ]
 
     targetResponse.headers.forEach((value, key) => {
-      if (!hopByHopHeaders.includes(key.toLowerCase())) {
+      if (!filteredHeaders.includes(key.toLowerCase())) {
         responseHeaders.set(key, value)
       }
     })

@@ -6,6 +6,7 @@ import { StatsCards } from './StatsCards'
 import { PeriodFilter } from './PeriodFilter'
 import { ProxyManagementCard } from './ProxyManagementCard'
 import { RequestLogsTable } from './RequestLogsTable'
+import { SessionManager } from '@/features/sessionKeys/view'
 
 export function DashboardView() {
   const {
@@ -70,6 +71,9 @@ export function DashboardView() {
 
       {/* Stats */}
       <StatsCards totals={totals} />
+
+      {/* Session Keys */}
+      <SessionManager />
 
       {/* APIs */}
       <div className="space-y-4">

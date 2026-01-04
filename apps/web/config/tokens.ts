@@ -42,6 +42,10 @@ export const tokens: Record<number, ChainTokens> = {
   },
 } as const
 
+export function isChainSupported(chainId: number): boolean {
+  return chainId in tokens
+}
+
 export function getTokens(chainId: number): ChainTokens {
   const chainTokens = tokens[chainId]
   if (!chainTokens) {
@@ -52,6 +56,10 @@ export function getTokens(chainId: number): ChainTokens {
 
 export function getUsdceConfig(chainId: number): TokenConfig {
   return getTokens(chainId).usdce
+}
+
+export function getUsdceConfigSafe(chainId: number): TokenConfig | null {
+  return tokens[chainId]?.usdce ?? null
 }
 
 export function getNativeConfig(chainId: number): ChainTokens['native'] {

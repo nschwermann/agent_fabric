@@ -1,7 +1,7 @@
 'use client'
 
-import { Play, Loader2, Wallet, Copy, Check, AlertCircle } from 'lucide-react'
-import { useState } from 'react'
+import { Play, Loader2, Wallet, Copy, Check, AlertCircle, Key, Shield } from 'lucide-react'
+import { useState, useEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -11,6 +11,8 @@ import { Badge } from '@/components/ui/badge'
 import { useUser } from '@/context/user'
 import { useAppKit } from '@reown/appkit/react'
 import { useApiTryIt } from '@/features/marketplace/model/useApiTryIt'
+import { useSmartAccount } from '@/features/smartAccount/model/useSmartAccount'
+import { useSessions } from '@/features/sessionKeys/model'
 import type { VariableDefinition } from '@/features/proxy/model/variables'
 
 interface ApiTryItProps {
@@ -45,6 +47,22 @@ export function ApiTryIt({
   const { open } = useAppKit()
   const [copied, setCopied] = useState(false)
 
+  // Smart account and session state
+  const { isEnabled: isSmartAccountEnabled, enable: enableSmartAccount, status: smartAccountStatus } = useSmartAccount()
+  const { sessions, isLoading: isLoadingSessions } = useSessions()
+  const activeSession = sessions[0] // Use first active session
+
+  // Session mode toggle
+  const [useSession, setUseSession] = useState(false)
+  const canUseSession = isSmartAccountEnabled && !!activeSession
+
+  // Auto-enable session mode if available
+  // useEffect(() => {
+  //   if (canUseSession && !useSession) {
+  //     setUseSession(true)
+  //   }
+  // }, [canUseSession, useSession])
+
   const {
     variables,
     setVariable,
@@ -56,6 +74,8 @@ export function ApiTryIt({
     proxyUrl,
     httpMethod,
     variablesSchema,
+    sessionId: activeSession?.sessionId,
+    useSessionKey: useSession && !!activeSession,
   })
 
   const isAuthenticated = session?.isAuthenticated
@@ -65,6 +85,13 @@ export function ApiTryIt({
       open()
       return
     }
+
+    // If session mode is enabled but smart account not enabled, enable it
+    if (useSession && !isSmartAccountEnabled) {
+      await enableSmartAccount()
+      return
+    }
+
     await executeRequest()
   }
 
@@ -76,6 +103,52 @@ export function ApiTryIt({
     }
   }
 
+  const getButtonContent = () => {
+    if (isLoading) {
+      return (
+        <>
+          <Loader2 className="size-4 animate-spin" />
+          {useSession ? 'Processing...' : 'Signing...'}
+        </>
+      )
+    }
+
+    if (!isAuthenticated) {
+      return (
+        <>
+          <Wallet className="size-4" />
+          Connect Wallet to Try
+        </>
+      )
+    }
+
+    if (useSession && !isSmartAccountEnabled) {
+      return (
+        <>
+          <Shield className="size-4" />
+          Enable Smart Account
+        </>
+      )
+    }
+
+    if (useSession && !activeSession && !isLoadingSessions) {
+      return (
+        <>
+          <Key className="size-4" />
+          Create Session First
+        </>
+      )
+    }
+
+    return (
+      <>
+        {useSession ? <Key className="size-4" /> : <Play className="size-4" />}
+        Make Request ({formatPrice(pricePerRequest)})
+        {useSession && activeSession && ' - Auto'}
+      </>
+    )
+  }
+
   return (
     <Card>
       <CardHeader>
@@ -85,7 +158,9 @@ export function ApiTryIt({
         </CardTitle>
         <CardDescription>
           Test this API by filling in the variables and making a request.
-          You'll need to sign a payment of {formatPrice(pricePerRequest)} USDC.E.
+          {useSession && activeSession
+            ? ' Payment will be signed automatically with your session key.'
+            : ` You'll need to sign a payment of ${formatPrice(pricePerRequest)} USDC.E.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -118,28 +193,57 @@ export function ApiTryIt({
           </div>
         )}
 
+        {/* Session Payment Toggle */}
+        {isAuthenticated && (
+          <div className="flex items-center gap-3 p-3 rounded-lg border">
+            <input
+              type="checkbox"
+              id="useSessionApi"
+              checked={useSession}
+              onChange={(e) => setUseSession(e.target.checked)}
+              disabled={isLoading || isLoadingSessions}
+              className="size-4 rounded border-input"
+            />
+            <div className="flex-1">
+              <Label htmlFor="useSessionApi" className="flex items-center gap-2 cursor-pointer">
+                <Key className="size-4" />
+                Use Session Key
+                {canUseSession && (
+                  <Badge variant="secondary" className="text-xs">
+                    No signing
+                  </Badge>
+                )}
+              </Label>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                {!isSmartAccountEnabled
+                  ? 'Enable Smart Account to use session keys'
+                  : !activeSession
+                    ? 'Create a session to enable auto-payments'
+                    : 'Pay without wallet signature using session key'
+                }
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Action button */}
         <div className="flex items-center gap-4">
           <Button
             onClick={handleTryIt}
-            disabled={isLoading}
+            disabled={
+              isLoading ||
+              smartAccountStatus === 'enabling' ||
+              (useSession && !activeSession && !isLoadingSessions && isSmartAccountEnabled)
+            }
             className="gap-2"
           >
-            {isLoading ? (
+            {smartAccountStatus === 'enabling' ? (
               <>
                 <Loader2 className="size-4 animate-spin" />
-                Processing...
-              </>
-            ) : !isAuthenticated ? (
-              <>
-                <Wallet className="size-4" />
-                Connect Wallet to Try
+                Enabling Smart Account...
               </>
             ) : (
-              <>
-                <Play className="size-4" />
-                Make Request ({formatPrice(pricePerRequest)})
-              </>
+              getButtonContent()
             )}
           </Button>
         </div>

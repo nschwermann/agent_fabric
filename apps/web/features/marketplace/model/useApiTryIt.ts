@@ -39,6 +39,10 @@ interface UseApiTryItOptions {
   proxyUrl: string
   httpMethod: string
   variablesSchema: VariableDefinition[]
+  /** Optional session ID for session key signing */
+  sessionId?: string
+  /** Whether to use session key signing */
+  useSessionKey?: boolean
 }
 
 interface UseApiTryItReturn {
@@ -115,8 +119,10 @@ export function useApiTryIt({
   proxyUrl,
   httpMethod,
   variablesSchema,
+  sessionId,
+  useSessionKey = false,
 }: UseApiTryItOptions): UseApiTryItReturn {
-  const { address } = useConnection()
+  const { address, chainId } = useConnection()
   const { mutateAsync: signTypedData } = useSignTypedData()
 
   const [variables, setVariables] = useState<Record<string, string>>(() => {
@@ -142,18 +148,85 @@ export function useApiTryIt({
   }, [])
 
   /**
-   * Sign EIP-3009 TransferWithAuthorization and create payment header
+   * Sign EIP-3009 TransferWithAuthorization using session key via server
+   */
+  const createSessionPaymentHeader = useCallback(async (
+    requirements: PaymentRequirements,
+    from: Address
+  ): Promise<string> => {
+    if (!sessionId) {
+      throw new Error('Session ID required for session signing')
+    }
+
+    const { payTo, asset, maxAmountRequired, maxTimeoutSeconds, network } = requirements
+    const reqChainId = parseChainId(network)
+
+    // Build EIP-3009 message
+    const message = buildEIP3009Message({
+      from,
+      to: payTo,
+      value: BigInt(maxAmountRequired),
+      validitySeconds: maxTimeoutSeconds,
+    })
+
+    console.log('[x402 Session] Requesting session signature:', {
+      sessionId,
+      message: {
+        ...message,
+        value: message.value.toString(),
+        validAfter: message.validAfter.toString(),
+        validBefore: message.validBefore.toString(),
+      },
+    })
+
+    // Request signature from server using session key
+    const signResponse = await fetch(`/api/sessions/${sessionId}/sign`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        from,
+        to: payTo,
+        value: maxAmountRequired,
+        validAfter: Number(message.validAfter),
+        validBefore: Number(message.validBefore),
+        nonce: message.nonce,
+        chainId: reqChainId,
+        tokenAddress: asset,
+      }),
+    })
+
+    if (!signResponse.ok) {
+      const err = await signResponse.json()
+      throw new Error(err.error || 'Failed to sign with session key')
+    }
+
+    const { signature } = await signResponse.json()
+    console.log('[x402 Session] Session signature obtained, length:', signature.length)
+
+    // Build payment header with session signature (149 bytes)
+    const header = buildPaymentHeader({
+      message,
+      signature,
+      asset,
+      chainId: reqChainId,
+    })
+
+    return encodePaymentHeader(header)
+  }, [sessionId])
+
+  /**
+   * Sign EIP-3009 TransferWithAuthorization with wallet
    * Per Cronos x402 spec: https://docs.cronos.org/cronos-x402-facilitator/quick-start-for-buyers
    */
-  const createPaymentHeader = useCallback(async (
+  const createWalletPaymentHeader = useCallback(async (
     requirements: PaymentRequirements,
     from: Address
   ): Promise<string> => {
     const { payTo, asset, maxAmountRequired, maxTimeoutSeconds, network } = requirements
-    const chainId = parseChainId(network)
+    const reqChainId = parseChainId(network)
 
     // Build EIP-712 domain using shared utility
-    const domain = buildUsdceDomain(asset, chainId)
+    const domain = buildUsdceDomain(asset, reqChainId)
 
     // Build EIP-3009 message using shared utility
     const message = buildEIP3009Message({
@@ -210,7 +283,7 @@ export function useApiTryIt({
       message,
       signature,
       asset,
-      chainId,
+      chainId: reqChainId,
     })
 
     console.log('[x402 Client] Payment header:', JSON.stringify(header, null, 2))
@@ -218,6 +291,19 @@ export function useApiTryIt({
     // Encode to base64 using shared utility
     return encodePaymentHeader(header)
   }, [signTypedData])
+
+  /**
+   * Create payment header using wallet or session key based on configuration
+   */
+  const createPaymentHeader = useCallback(async (
+    requirements: PaymentRequirements,
+    from: Address
+  ): Promise<string> => {
+    if (useSessionKey && sessionId) {
+      return createSessionPaymentHeader(requirements, from)
+    }
+    return createWalletPaymentHeader(requirements, from)
+  }, [useSessionKey, sessionId, createSessionPaymentHeader, createWalletPaymentHeader])
 
   /**
    * Execute the API request with x402 payment flow
