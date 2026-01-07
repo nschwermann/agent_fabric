@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { useConnection } from 'wagmi'
 import { reverseLookupCroDomain, isValidAddress } from '@/lib/cronosid'
 import type { Address } from 'viem'
@@ -8,6 +8,10 @@ import type { Address } from 'viem'
 export type GeneratorState = 'input' | 'generated'
 
 export interface UsePayLinkGeneratorReturn {
+  // Wallet state
+  address: Address | undefined
+  truncatedAddress: string
+
   // State
   state: GeneratorState
   isTransitioning: boolean
@@ -160,7 +164,17 @@ export function usePayLinkGenerator(): UsePayLinkGeneratorReturn {
     }
   }, [croName])
 
+  // Memoized truncated address
+  const truncatedAddress = useMemo(() => {
+    if (!address) return ''
+    return `${address.slice(0, 6)}...${address.slice(-4)}`
+  }, [address])
+
   return {
+    // Wallet state
+    address: address as Address | undefined,
+    truncatedAddress,
+
     // State
     state,
     isTransitioning,
