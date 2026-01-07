@@ -1,4 +1,4 @@
-import { pgTable, uuid, varchar, text, timestamp, boolean, bigint, jsonb, index } from 'drizzle-orm/pg-core'
+import { pgTable, uuid, varchar, text, timestamp, boolean, bigint, jsonb, index, integer, unique } from 'drizzle-orm/pg-core'
 import type { VariableDefinition } from '@/features/proxy/model/variables'
 import type { HybridEncryptedData } from '@/lib/crypto/encryption'
 import type { SerializedSessionScope, OnChainParams } from '@/lib/sessionKeys/types'
@@ -229,6 +229,75 @@ export const oauthAccessTokens = pgTable('oauth_access_tokens', {
   index('idx_oauth_access_tokens_session').on(table.sessionKeyId),
 ])
 
+// ============================================================================
+// MCP Server Tables
+// ============================================================================
+
+/**
+ * MCP Server configurations
+ * Each user can have one MCP server with a unique slug
+ */
+export const mcpServers = pgTable('mcp_servers', {
+  id: uuid('id').defaultRandom().primaryKey(),
+
+  /** Owner of this MCP server */
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull().unique(),
+
+  /** Unique slug for routing (e.g., "acme-corp" for /mcp/acme-corp) */
+  slug: varchar('slug', { length: 50 }).notNull().unique(),
+
+  /** Human-readable name shown to AI clients */
+  name: varchar('name', { length: 100 }).notNull(),
+
+  /** Description of what this MCP server provides */
+  description: text('description'),
+
+  /** Whether this server is publicly discoverable */
+  isPublic: boolean('is_public').default(false).notNull(),
+
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_mcp_servers_slug').on(table.slug),
+])
+
+/**
+ * Tools exposed by an MCP server
+ * Links MCP servers to API proxies they want to expose as tools
+ */
+export const mcpServerTools = pgTable('mcp_server_tools', {
+  id: uuid('id').defaultRandom().primaryKey(),
+
+  /** The MCP server this tool belongs to */
+  mcpServerId: uuid('mcp_server_id').references(() => mcpServers.id, { onDelete: 'cascade' }).notNull(),
+
+  /** The API proxy this tool wraps */
+  apiProxyId: uuid('api_proxy_id').references(() => apiProxies.id, { onDelete: 'cascade' }).notNull(),
+
+  /** Override tool name (defaults to proxy name if null) */
+  toolName: varchar('tool_name', { length: 100 }),
+
+  /** Override tool description */
+  toolDescription: text('tool_description'),
+
+  /** Short description for context efficiency (max 100 chars) */
+  shortDescription: varchar('short_description', { length: 100 }),
+
+  /** Display order for tool listing */
+  displayOrder: integer('display_order').default(0).notNull(),
+
+  /** Whether this tool is currently enabled */
+  isEnabled: boolean('is_enabled').default(true).notNull(),
+
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_mcp_server_tools_server').on(table.mcpServerId),
+  // Ensure each proxy is only added once per MCP server
+  unique('unique_mcp_server_proxy').on(table.mcpServerId, table.apiProxyId),
+])
+
 // Type exports for use in application code
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -250,3 +319,9 @@ export type NewOAuthAuthCode = typeof oauthAuthCodes.$inferInsert
 
 export type OAuthAccessToken = typeof oauthAccessTokens.$inferSelect
 export type NewOAuthAccessToken = typeof oauthAccessTokens.$inferInsert
+
+export type McpServer = typeof mcpServers.$inferSelect
+export type NewMcpServer = typeof mcpServers.$inferInsert
+
+export type McpServerTool = typeof mcpServerTools.$inferSelect
+export type NewMcpServerTool = typeof mcpServerTools.$inferInsert
