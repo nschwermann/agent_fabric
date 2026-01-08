@@ -24,6 +24,7 @@ import { serializeScope, type SessionScope } from '@/lib/sessionKeys/types'
  * - code_challenge_method: Must be "S256"
  * - scope: Space-separated list of scope IDs (e.g., "x402:payments")
  * - state: Opaque value for CSRF protection
+ * - mcp_slug: (Optional) MCP server slug to scope the authorization
  */
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url)
@@ -35,6 +36,7 @@ export async function GET(request: NextRequest) {
   const codeChallengeMethod = searchParams.get('code_challenge_method')
   const scopeParam = searchParams.get('scope')
   const state = searchParams.get('state')
+  const mcpSlug = searchParams.get('mcp_slug') // Optional MCP server slug
 
   // Validate required params
   if (!clientId) {
@@ -111,6 +113,7 @@ export async function GET(request: NextRequest) {
     scopes: scopeDetails,
     redirectUri,
     state,
+    mcpSlug, // Include slug if provided
   })
 }
 
@@ -130,6 +133,7 @@ export async function GET(request: NextRequest) {
  * - approved_scopes: Array of scope IDs the user approved
  * - session_id: The session ID from grantSession (bytes32 hex)
  * - state: Opaque value for CSRF protection
+ * - mcp_slug: (Optional) MCP server slug to scope the authorization
  */
 export const POST = withAuth(async (user, request) => {
   const body = await request.json()
@@ -141,6 +145,7 @@ export const POST = withAuth(async (user, request) => {
     approved_scopes: approvedScopes,
     session_id: sessionId,
     state,
+    mcp_slug: mcpSlug,
   } = body
 
   // Validate required params
@@ -218,6 +223,7 @@ export const POST = withAuth(async (user, request) => {
       validUntil: Math.floor(session.validUntil.getTime() / 1000),
       scopes: scopes.map(serializeScope),
       sessionId: session.sessionId, // Link to actual session
+      mcpSlug: typeof mcpSlug === 'string' ? mcpSlug : undefined, // Optional MCP slug
     },
     codeChallenge,
     codeChallengeMethod: 'S256',
@@ -238,6 +244,7 @@ export const POST = withAuth(async (user, request) => {
     userId: user.id,
     sessionId: session.sessionId,
     scopes: approvedScopes,
+    mcpSlug: mcpSlug || null,
   })
 
   // Build redirect URL with code

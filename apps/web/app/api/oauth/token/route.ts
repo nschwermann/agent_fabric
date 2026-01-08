@@ -11,6 +11,14 @@ import {
 } from '@/lib/auth/oauth'
 import * as bcrypt from 'bcrypt'
 
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization, mcp-protocol-version',
+  }
+}
+
 /**
  * POST /api/oauth/token
  *
@@ -50,7 +58,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'unsupported_grant_type',
       error_description: 'Only authorization_code grant type is supported',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
 
   // Validate required params
@@ -58,25 +66,25 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_request',
       error_description: 'Missing authorization code',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
   if (!clientId) {
     return NextResponse.json({
       error: 'invalid_request',
       error_description: 'Missing client_id',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
   if (!clientSecret) {
     return NextResponse.json({
       error: 'invalid_request',
       error_description: 'Missing client_secret',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
   if (!codeVerifier) {
     return NextResponse.json({
       error: 'invalid_request',
       error_description: 'Missing code_verifier (PKCE required)',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
 
   // Get and validate client
@@ -85,7 +93,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_client',
       error_description: 'Unknown client',
-    }, { status: 401 })
+    }, { status: 401, headers: corsHeaders() })
   }
 
   // Verify client secret
@@ -94,7 +102,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_client',
       error_description: 'Invalid client credentials',
-    }, { status: 401 })
+    }, { status: 401, headers: corsHeaders() })
   }
 
   // Get and validate authorization code
@@ -103,7 +111,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_grant',
       error_description: 'Invalid or expired authorization code',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
 
   // Verify redirect URI matches
@@ -111,7 +119,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_grant',
       error_description: 'Redirect URI mismatch',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
 
   // Verify PKCE code challenge
@@ -119,7 +127,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_grant',
       error_description: 'Invalid code_verifier',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
 
   // Get the session linked to this authorization
@@ -128,7 +136,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_grant',
       error_description: 'No session linked to this authorization',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
 
   const session = await db.query.sessionKeys.findFirst({
@@ -143,7 +151,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       error: 'invalid_grant',
       error_description: 'Linked session not found or inactive',
-    }, { status: 400 })
+    }, { status: 400, headers: corsHeaders() })
   }
 
   // Mark authorization code as used (one-time use)
@@ -164,6 +172,7 @@ export async function POST(request: NextRequest) {
     userId: authCode.userId,
     sessionKeyId: session.id,
     scopes: authCode.approvedScopes,
+    mcpSlug: authCode.sessionConfig.mcpSlug, // Include MCP slug if present
     expiresAt,
   }).returning()
 
@@ -172,6 +181,7 @@ export async function POST(request: NextRequest) {
     userId: authCode.userId,
     sessionId: session.sessionId,
     scopes: authCode.approvedScopes,
+    mcpSlug: authCode.sessionConfig.mcpSlug || null,
     expiresAt: expiresAt.toISOString(),
   })
 
@@ -186,5 +196,12 @@ export async function POST(request: NextRequest) {
     wallet_address: (await db.query.users.findFirst({
       where: eq((await import('@/lib/db')).users.id, authCode.userId),
     }))?.walletAddress,
+  }, { headers: corsHeaders() })
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(),
   })
 }

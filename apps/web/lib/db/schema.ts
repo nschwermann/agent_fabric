@@ -176,6 +176,7 @@ export const oauthAuthCodes = pgTable('oauth_auth_codes', {
     validUntil: number
     scopes: SerializedSessionScope[]
     sessionId: string // Links to the actual session key
+    mcpSlug?: string // Optional MCP server slug this auth is for
   }>().notNull(),
 
   /** PKCE code challenge */
@@ -216,6 +217,9 @@ export const oauthAccessTokens = pgTable('oauth_access_tokens', {
 
   /** Scopes granted to this token */
   scopes: jsonb('scopes').$type<string[]>().notNull(),
+
+  /** MCP server slug this token is scoped to (optional) */
+  mcpSlug: varchar('mcp_slug', { length: 50 }),
 
   /** When this token expires */
   expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),

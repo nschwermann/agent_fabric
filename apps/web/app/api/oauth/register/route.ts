@@ -1,0 +1,131 @@
+import { NextRequest, NextResponse } from 'next/server'
+import { db, oauthClients } from '@/lib/db'
+import { randomBytes } from 'crypto'
+import * as bcrypt from 'bcrypt'
+
+/**
+ * POST /api/oauth/register
+ *
+ * OAuth 2.0 Dynamic Client Registration (RFC 7591)
+ * https://datatracker.ietf.org/doc/html/rfc7591
+ *
+ * MCP clients use this to register themselves dynamically.
+ *
+ * Body (JSON):
+ * - redirect_uris: Array of redirect URIs (required)
+ * - client_name: Human-readable name (optional)
+ * - client_uri: URL of client homepage (optional)
+ * - logo_uri: URL of client logo (optional)
+ * - scope: Space-separated list of scopes (optional)
+ */
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json()
+
+    const {
+      redirect_uris: redirectUris,
+      client_name: clientName,
+      client_uri: clientUri,
+      logo_uri: logoUri,
+      scope,
+    } = body
+
+    // Validate redirect_uris
+    if (!redirectUris || !Array.isArray(redirectUris) || redirectUris.length === 0) {
+      return NextResponse.json({
+        error: 'invalid_redirect_uri',
+        error_description: 'redirect_uris is required and must be a non-empty array',
+      }, {
+        status: 400,
+        headers: corsHeaders(),
+      })
+    }
+
+    // Validate each redirect URI
+    for (const uri of redirectUris) {
+      try {
+        new URL(uri)
+      } catch {
+        return NextResponse.json({
+          error: 'invalid_redirect_uri',
+          error_description: `Invalid redirect URI: ${uri}`,
+        }, {
+          status: 400,
+          headers: corsHeaders(),
+        })
+      }
+    }
+
+    // Generate client credentials
+    const clientId = `mcp_${randomBytes(16).toString('hex')}`
+    const clientSecret = randomBytes(32).toString('base64url')
+    const secretHash = await bcrypt.hash(clientSecret, 10)
+
+    // Parse requested scopes (default to common MCP scopes)
+    const requestedScopes = scope
+      ? scope.split(' ').filter(Boolean)
+      : ['x402:payments', 'mcp:tools']
+
+    // Create the client
+    await db.insert(oauthClients).values({
+      id: clientId,
+      secretHash,
+      name: clientName || 'MCP Client',
+      description: clientUri ? `Client from ${clientUri}` : 'Dynamically registered MCP client',
+      logoUrl: logoUri || null,
+      redirectUris,
+      allowedScopes: requestedScopes,
+      isActive: true,
+    })
+
+    console.log('[POST /api/oauth/register] Client registered:', {
+      clientId,
+      name: clientName || 'MCP Client',
+      redirectUris,
+      scopes: requestedScopes,
+    })
+
+    // Return client credentials (RFC 7591 response)
+    return NextResponse.json({
+      client_id: clientId,
+      client_secret: clientSecret,
+      client_id_issued_at: Math.floor(Date.now() / 1000),
+      client_secret_expires_at: 0, // Never expires
+      redirect_uris: redirectUris,
+      client_name: clientName || 'MCP Client',
+      client_uri: clientUri,
+      logo_uri: logoUri,
+      scope: requestedScopes.join(' '),
+      token_endpoint_auth_method: 'client_secret_post',
+      grant_types: ['authorization_code'],
+      response_types: ['code'],
+    }, {
+      status: 201,
+      headers: corsHeaders(),
+    })
+  } catch (error) {
+    console.error('[POST /api/oauth/register] Error:', error)
+    return NextResponse.json({
+      error: 'server_error',
+      error_description: 'Failed to register client',
+    }, {
+      status: 500,
+      headers: corsHeaders(),
+    })
+  }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(),
+  })
+}
+
+function corsHeaders() {
+  return {
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Methods': 'POST, OPTIONS',
+    'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+  }
+}
