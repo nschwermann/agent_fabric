@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db, oauthClients } from '@/lib/db'
+import { eq } from 'drizzle-orm'
 import { randomBytes } from 'crypto'
 import * as bcrypt from 'bcrypt'
 
@@ -10,6 +11,9 @@ import * as bcrypt from 'bcrypt'
  * https://datatracker.ietf.org/doc/html/rfc7591
  *
  * MCP clients use this to register themselves dynamically.
+ *
+ * DEDUPLICATION: If a client with matching redirect_uris already exists,
+ * we return the existing client with a refreshed secret (avoids duplicate entries).
  *
  * Body (JSON):
  * - redirect_uris: Array of redirect URIs (required)
@@ -56,36 +60,68 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Generate client credentials
-    const clientId = `mcp_${randomBytes(16).toString('hex')}`
-    const clientSecret = randomBytes(32).toString('base64url')
-    const secretHash = await bcrypt.hash(clientSecret, 10)
-
     // Parse requested scopes (default to common MCP scopes)
     const requestedScopes = scope
       ? scope.split(' ').filter(Boolean)
       : ['x402:payments', 'mcp:tools']
 
-    // Create the client
-    await db.insert(oauthClients).values({
-      id: clientId,
-      secretHash,
-      name: clientName || 'MCP Client',
-      description: clientUri ? `Client from ${clientUri}` : 'Dynamically registered MCP client',
-      logoUrl: logoUri || null,
-      redirectUris,
-      allowedScopes: requestedScopes,
-      isActive: true,
+    // Normalize redirect URIs for comparison (sorted, lowercase)
+    const normalizedUris = [...redirectUris].map((u: string) => u.toLowerCase()).sort()
+
+    // Check for existing client with matching redirect_uris
+    const allClients = await db.select().from(oauthClients)
+    const existingClient = allClients.find(client => {
+      if (!client.redirectUris || !Array.isArray(client.redirectUris)) return false
+      const clientNormalizedUris = [...(client.redirectUris as string[])].map(u => u.toLowerCase()).sort()
+      return JSON.stringify(clientNormalizedUris) === JSON.stringify(normalizedUris)
     })
 
-    console.log('[POST /api/oauth/register] Client registered:', {
-      clientId,
-      name: clientName || 'MCP Client',
-      redirectUris,
-      scopes: requestedScopes,
-    })
+    // Generate new secret (used for both new and existing clients)
+    const clientSecret = randomBytes(32).toString('base64url')
+    const secretHash = await bcrypt.hash(clientSecret, 10)
+
+    let clientId: string
+
+    if (existingClient) {
+      // Update existing client with new secret
+      clientId = existingClient.id
+      await db.update(oauthClients)
+        .set({
+          secretHash,
+          name: clientName || existingClient.name,
+          logoUrl: logoUri || existingClient.logoUrl,
+        })
+        .where(eq(oauthClients.id, clientId))
+
+      console.log('[POST /api/oauth/register] Existing client refreshed:', {
+        clientId,
+        name: clientName || existingClient.name,
+        redirectUris,
+      })
+    } else {
+      // Create new client
+      clientId = `mcp_${randomBytes(16).toString('hex')}`
+      await db.insert(oauthClients).values({
+        id: clientId,
+        secretHash,
+        name: clientName || 'MCP Client',
+        description: clientUri ? `Client from ${clientUri}` : 'Dynamically registered MCP client',
+        logoUrl: logoUri || null,
+        redirectUris,
+        allowedScopes: requestedScopes,
+        isActive: true,
+      })
+
+      console.log('[POST /api/oauth/register] New client registered:', {
+        clientId,
+        name: clientName || 'MCP Client',
+        redirectUris,
+        scopes: requestedScopes,
+      })
+    }
 
     // Return client credentials (RFC 7591 response)
+    // Note: For existing clients, we return 200 instead of 201
     return NextResponse.json({
       client_id: clientId,
       client_secret: clientSecret,
@@ -100,7 +136,7 @@ export async function POST(request: NextRequest) {
       grant_types: ['authorization_code'],
       response_types: ['code'],
     }, {
-      status: 201,
+      status: existingClient ? 200 : 201,
       headers: corsHeaders(),
     })
   } catch (error) {

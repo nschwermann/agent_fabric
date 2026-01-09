@@ -11,8 +11,7 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
-    "generate-keys": "tsx scripts/generate-keys.ts",
-    "db:seed-oauth-client": "tsx scripts/seed-oauth-client.ts"
+    "generate-keys": "tsx scripts/generate-keys.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.0.0",
