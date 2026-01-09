@@ -114,8 +114,9 @@ function decryptHybrid(encrypted: HybridEncryptedData): string {
  */
 export function decryptSessionKey(encryptedPrivateKey: HybridEncryptedData): Hex {
   const decrypted = decryptHybrid(encryptedPrivateKey)
-  // The decrypted data is the private key as a hex string
-  return decrypted as Hex
+  // The decrypted data is JSON: {"privateKey":"0x..."}
+  const parsed = JSON.parse(decrypted) as { privateKey: string }
+  return parsed.privateKey as Hex
 }
 
 /**
@@ -139,14 +140,15 @@ function buildUsdceDomain(tokenAddress: Address, chainId: number) {
 }
 
 /**
- * Build EIP-712 domain for smart account (for session key signatures)
+ * Build EIP-712 domain for AgentDelegator contract (for session key signatures)
+ * The verifyingContract is the user's wallet address (where AgentDelegator is delegated)
  */
-function buildSmartAccountDomain(smartAccountAddress: Address, chainId: number) {
+function buildAgentDelegatorDomain(walletAddress: Address, chainId: number) {
   return {
-    name: 'ERC7702Account',
+    name: 'AgentDelegator',
     version: '1',
     chainId,
-    verifyingContract: smartAccountAddress,
+    verifyingContract: walletAddress,
   } as const
 }
 
@@ -183,9 +185,21 @@ export async function signPayment(params: {
 }): Promise<string> {
   const { session, ownerAddress, recipientAddress, amount, chainId } = params
 
+  console.log('[SignPayment] Starting with params:', {
+    sessionId: session.sessionId,
+    sessionKeyAddress: session.sessionKeyAddress,
+    ownerAddress,
+    recipientAddress,
+    amount: amount.toString(),
+    chainId,
+    approvedContracts: session.approvedContracts,
+  })
+
   // Decrypt the session key's private key
   const privateKey = decryptSessionKey(session.encryptedPrivateKey as HybridEncryptedData)
   const sessionAccount = privateKeyToAccount(privateKey)
+
+  console.log('[SignPayment] Session account address:', sessionAccount.address)
 
   const usdceAddress = getUsdceAddress(chainId)
   const nonce = generateNonce()
@@ -236,9 +250,9 @@ export async function signPayment(params: {
     structHash,
   }
 
-  // Sign with the session key using the smart account's domain
+  // Sign with the session key using the AgentDelegator domain
   const signature = await sessionAccount.signTypedData({
-    domain: buildSmartAccountDomain(ownerAddress, chainId),
+    domain: buildAgentDelegatorDomain(ownerAddress, chainId),
     types: SESSION_SIGNATURE_TYPES,
     primaryType: 'SessionSignature',
     message: sessionSignatureMessage,
@@ -251,7 +265,18 @@ export async function signPayment(params: {
   const structHashHex = structHash.slice(2) // Remove 0x prefix (64 chars = 32 bytes)
   const signatureHex = signature.slice(2) // Remove 0x prefix (130 chars = 65 bytes)
 
+  console.log('[SignPayment] Building 149-byte signature:', {
+    sessionId: session.sessionId,
+    sessionIdHexLength: sessionIdHex.length,
+    verifyingContract: usdceAddress,
+    verifyingContractHexLength: verifyingContractHex.length,
+    structHash,
+    structHashHexLength: structHashHex.length,
+    signatureHexLength: signatureHex.length,
+  })
+
   const fullSignature = `0x${sessionIdHex}${verifyingContractHex}${structHashHex}${signatureHex}` as Hex
+  console.log('[SignPayment] Full signature length:', (fullSignature.length - 2) / 2, 'bytes')
 
   // Build x402 payment header
   const paymentHeader = {
