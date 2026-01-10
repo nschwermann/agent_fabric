@@ -4,17 +4,20 @@ import {
   createDecipheriv,
   constants,
   KeyObject,
-  randomBytes,
 } from 'crypto'
-import {
-  type Address,
-  type Hex,
-  toHex,
-  keccak256,
-  encodeAbiParameters,
-} from 'viem'
+import { type Address, type Hex } from 'viem'
 import { privateKeyToAccount } from 'viem/accounts'
 import type { SessionKey, ApiProxy } from '../db/client.js'
+import {
+  computeTransferWithAuthorizationStructHash,
+  buildAgentDelegatorDomain,
+  buildSessionSignature,
+  buildPaymentHeader,
+  encodePaymentHeader,
+  generateNonce,
+  getUsdceAddress,
+  SESSION_SIGNATURE_TYPES,
+} from '@x402/payment'
 
 // Constants
 const AES_ALGORITHM = 'aes-256-gcm'
@@ -28,30 +31,6 @@ interface HybridEncryptedData {
   ciphertext: string
   tag: string
 }
-
-/**
- * EIP-3009 TransferWithAuthorization typed data structure
- */
-const EIP3009_TYPES = {
-  TransferWithAuthorization: [
-    { name: 'from', type: 'address' },
-    { name: 'to', type: 'address' },
-    { name: 'value', type: 'uint256' },
-    { name: 'validAfter', type: 'uint256' },
-    { name: 'validBefore', type: 'uint256' },
-    { name: 'nonce', type: 'bytes32' },
-  ],
-} as const
-
-/**
- * EIP-712 domain for SessionSignature (used by smart account)
- */
-const SESSION_SIGNATURE_TYPES = {
-  SessionSignature: [
-    { name: 'verifyingContract', type: 'address' },
-    { name: 'structHash', type: 'bytes32' },
-  ],
-} as const
 
 // Cache server private key
 let serverPrivateKey: KeyObject | null = null
@@ -120,57 +99,6 @@ export function decryptSessionKey(encryptedPrivateKey: HybridEncryptedData): Hex
 }
 
 /**
- * Generate a random 32-byte nonce for EIP-3009 authorization
- */
-export function generateNonce(): Hex {
-  const bytes = randomBytes(32)
-  return toHex(bytes)
-}
-
-/**
- * Build EIP-712 domain for USDC.e token
- */
-function buildUsdceDomain(tokenAddress: Address, chainId: number) {
-  return {
-    name: 'Bridged USDC (Stargate)',
-    version: '1',
-    chainId,
-    verifyingContract: tokenAddress,
-  } as const
-}
-
-/**
- * Build EIP-712 domain for AgentDelegator contract (for session key signatures)
- * The verifyingContract is the user's wallet address (where AgentDelegator is delegated)
- */
-function buildAgentDelegatorDomain(walletAddress: Address, chainId: number) {
-  return {
-    name: 'AgentDelegator',
-    version: '1',
-    chainId,
-    verifyingContract: walletAddress,
-  } as const
-}
-
-/**
- * Get network string from chain ID
- */
-function getNetworkFromChainId(chainId: number): 'cronos' | 'cronos-testnet' {
-  return chainId === 25 ? 'cronos' : 'cronos-testnet'
-}
-
-/**
- * Get USDC.e address for chain
- */
-function getUsdceAddress(chainId: number): Address {
-  if (chainId === 25) {
-    return '0xf951eC28187D9E5Ca673Da8FE6757E6f0Be5F77C'
-  }
-  // Testnet
-  return '0xc01efAaF7C5C61bEbFAeb358E1161b537b8bC0e0'
-}
-
-/**
  * Sign an x402 payment using a session key
  *
  * Creates a 149-byte signature in the format:
@@ -207,7 +135,7 @@ export async function signPayment(params: {
   const validBefore = BigInt(Math.floor(Date.now() / 1000) + 300) // 5 minutes validity
 
   // Build the EIP-3009 message
-  const eip3009Message = {
+  const message = {
     from: ownerAddress,
     to: recipientAddress,
     value: amount,
@@ -217,32 +145,7 @@ export async function signPayment(params: {
   }
 
   // Get the struct hash for EIP-3009 TransferWithAuthorization
-  const structHash = keccak256(
-    encodeAbiParameters(
-      [
-        { type: 'bytes32' },
-        { type: 'address' },
-        { type: 'address' },
-        { type: 'uint256' },
-        { type: 'uint256' },
-        { type: 'uint256' },
-        { type: 'bytes32' },
-      ],
-      [
-        keccak256(
-          new TextEncoder().encode(
-            'TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)'
-          )
-        ) as Hex,
-        ownerAddress,
-        recipientAddress,
-        amount,
-        validAfter,
-        validBefore,
-        nonce,
-      ]
-    )
-  )
+  const structHash = computeTransferWithAuthorizationStructHash(message)
 
   // Build the SessionSignature message that the session key will sign
   const sessionSignatureMessage = {
@@ -251,52 +154,32 @@ export async function signPayment(params: {
   }
 
   // Sign with the session key using the AgentDelegator domain
-  const signature = await sessionAccount.signTypedData({
+  const ecdsaSignature = await sessionAccount.signTypedData({
     domain: buildAgentDelegatorDomain(ownerAddress, chainId),
     types: SESSION_SIGNATURE_TYPES,
     primaryType: 'SessionSignature',
     message: sessionSignatureMessage,
   })
 
-  // Build the 149-byte signature format:
-  // sessionId (32 bytes) + verifyingContract (20 bytes) + structHash (32 bytes) + ecdsaSignature (65 bytes)
-  const sessionIdHex = session.sessionId.slice(2) // Remove 0x prefix (64 chars = 32 bytes)
-  const verifyingContractHex = usdceAddress.slice(2).toLowerCase() // Remove 0x prefix (40 chars = 20 bytes)
-  const structHashHex = structHash.slice(2) // Remove 0x prefix (64 chars = 32 bytes)
-  const signatureHex = signature.slice(2) // Remove 0x prefix (130 chars = 65 bytes)
-
-  console.log('[SignPayment] Building 149-byte signature:', {
-    sessionId: session.sessionId,
-    sessionIdHexLength: sessionIdHex.length,
+  // Build the 149-byte signature
+  const fullSignature = buildSessionSignature({
+    sessionId: session.sessionId as Hex,
     verifyingContract: usdceAddress,
-    verifyingContractHexLength: verifyingContractHex.length,
     structHash,
-    structHashHexLength: structHashHex.length,
-    signatureHexLength: signatureHex.length,
+    ecdsaSignature,
   })
 
-  const fullSignature = `0x${sessionIdHex}${verifyingContractHex}${structHashHex}${signatureHex}` as Hex
   console.log('[SignPayment] Full signature length:', (fullSignature.length - 2) / 2, 'bytes')
 
-  // Build x402 payment header
-  const paymentHeader = {
-    x402Version: 1,
-    scheme: 'exact',
-    network: getNetworkFromChainId(chainId),
-    payload: {
-      from: ownerAddress,
-      to: recipientAddress,
-      value: amount.toString(),
-      validAfter: Number(validAfter),
-      validBefore: Number(validBefore),
-      nonce,
-      signature: fullSignature,
-      asset: usdceAddress,
-    },
-  }
+  // Build and encode the payment header
+  const paymentHeader = buildPaymentHeader({
+    message,
+    signature: fullSignature,
+    asset: usdceAddress,
+    chainId,
+  })
 
-  // Encode as base64 for X-PAYMENT header
-  return Buffer.from(JSON.stringify(paymentHeader)).toString('base64')
+  return encodePaymentHeader(paymentHeader)
 }
 
 /**
@@ -307,11 +190,6 @@ export async function buildPaymentForProxy(
   proxy: ApiProxy,
   chainId: number
 ): Promise<string> {
-  // Get the user's wallet address from the session
-  // The session is linked to a user, and we need the owner address for payments
-  // For now, we'll use the sessionKeyAddress owner (which should be derived from the smart account)
-  // In a real implementation, you'd fetch the user's wallet address
-
   const { db, users } = await import('../db/client.js')
   const { eq } = await import('drizzle-orm')
 

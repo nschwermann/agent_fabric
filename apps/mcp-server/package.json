@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.25.2",
+    "@x402/payment": "workspace:*",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",

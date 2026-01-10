@@ -67,7 +67,7 @@ export default async function ExplorePage({ params }: PageProps) {
   // Build derived data
   const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'
   const proxyUrl = buildProxyUrl(baseUrl, api.slug || api.id)
-  const category = api.category ? getCategoryById(api.category) : null
+  const category = api.category ? getCategoryById(api.category) ?? null : null
   const variablesSchema = (api.variablesSchema || []) as VariableDefinition[]
   const tags = (api.tags as string[]) || []
   const httpMethod = (api.httpMethod || 'GET') as HttpMethod

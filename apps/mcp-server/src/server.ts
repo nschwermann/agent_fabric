@@ -177,10 +177,12 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
         ? (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape
         : {}
 
-      server.tool(
+      server.registerTool(
         tool.name,
-        tool.description,
-        schemaShape,
+        {
+          description: tool.description,
+          inputSchema: schemaShape,
+        },
         async (args) => {
           const result = await tool.handler(args as Record<string, unknown>, toolContext)
           return {

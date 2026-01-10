@@ -33,18 +33,22 @@ export function AuthorizationActions({
       )
     }
 
-    const statusText = {
+    const statusText: Record<GrantSessionStatus, string> = {
+      idle: 'Processing...',
       generating: 'Generating key...',
       signing: 'Sign in wallet...',
       confirming: 'Confirming...',
       saving: 'Saving...',
-      idle: 'Processing...',
-    }[grantStatus] || 'Processing...'
+      success: 'Done!',
+      error: 'Error',
+    }
+
+    const text = statusText[grantStatus]
 
     return (
       <>
         <Loader2 className="size-4 animate-spin mr-2" />
-        {statusText}
+        {text}
       </>
     )
   }

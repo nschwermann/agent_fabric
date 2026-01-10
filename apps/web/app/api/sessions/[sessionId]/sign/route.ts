@@ -4,78 +4,15 @@ import { eq, and } from 'drizzle-orm'
 import { withAuth } from '@/lib/auth'
 import { decryptHybrid } from '@/lib/crypto/encryption'
 import { privateKeyToAccount } from 'viem/accounts'
-import { concat, keccak256, encodeAbiParameters, type Hex, type Address } from 'viem'
-// Note: We compute structHash directly instead of using hashTypedData with domain/types
+import { type Hex, type Address } from 'viem'
 import { isContractApproved } from '@/lib/sessionKeys/flattenScopes'
 import { deserializeScope, type SerializedSessionScope } from '@/lib/sessionKeys/types'
-
-/**
- * EIP-712 types for session key signatures
- * Used to bind session signatures to specific contracts with domain verification
- */
-const SESSION_SIGNATURE_TYPES = {
-  SessionSignature: [
-    { name: 'verifyingContract', type: 'address' },
-    { name: 'structHash', type: 'bytes32' },
-  ],
-} as const
-
-/**
- * Compute the EIP-712 struct hash for TransferWithAuthorization
- * structHash = keccak256(abi.encode(TYPE_HASH, from, to, value, validAfter, validBefore, nonce))
- */
-function computeTransferWithAuthorizationStructHash(message: {
-  from: Address
-  to: Address
-  value: bigint
-  validAfter: bigint
-  validBefore: bigint
-  nonce: Hex
-}): Hex {
-  // Type hash for TransferWithAuthorization
-  const typeHash = keccak256(
-    new TextEncoder().encode(
-      'TransferWithAuthorization(address from,address to,uint256 value,uint256 validAfter,uint256 validBefore,bytes32 nonce)'
-    )
-  ) as Hex
-
-  // Encode and hash the struct
-  const encoded = encodeAbiParameters(
-    [
-      { type: 'bytes32' },  // typeHash
-      { type: 'address' },  // from
-      { type: 'address' },  // to
-      { type: 'uint256' },  // value
-      { type: 'uint256' },  // validAfter
-      { type: 'uint256' },  // validBefore
-      { type: 'bytes32' },  // nonce
-    ],
-    [
-      typeHash,
-      message.from,
-      message.to,
-      message.value,
-      message.validAfter,
-      message.validBefore,
-      message.nonce,
-    ]
-  )
-
-  return keccak256(encoded)
-}
-
-/**
- * Build EIP-712 domain for AgentDelegator contract
- * The verifyingContract is the user's wallet address (where AgentDelegator is delegated)
- */
-function buildAgentDelegatorDomain(walletAddress: Address, chainId: number) {
-  return {
-    name: 'AgentDelegator',
-    version: '1',
-    chainId,
-    verifyingContract: walletAddress,
-  } as const
-}
+import {
+  computeTransferWithAuthorizationStructHash,
+  buildAgentDelegatorDomain,
+  buildSessionSignature,
+  SESSION_SIGNATURE_TYPES,
+} from '@x402/payment'
 
 /**
  * POST /api/sessions/[sessionId]/sign - Sign an EIP-3009 payment with session key
@@ -260,14 +197,13 @@ export const POST = withAuth(async (user, request, context) => {
       },
     })
 
-    // Step 4: Build 149-byte signature:
-    // sessionId (32) + verifyingContract (20) + structHash (32) + ecdsaSig (65) = 149 bytes
-    const signature = concat([
-      session.sessionId as Hex,    // 32 bytes
-      tokenAddress as Hex,          // 20 bytes (verifyingContract)
-      structHash,                   // 32 bytes
-      ecdsaSignature,               // 65 bytes
-    ])
+    // Step 4: Build 149-byte signature using shared utility
+    const signature = buildSessionSignature({
+      sessionId: session.sessionId as Hex,
+      verifyingContract: tokenAddress as Address,
+      structHash,
+      ecdsaSignature,
+    })
 
     console.log('[sign] 149-byte signature created:', {
       sessionId: session.sessionId,
