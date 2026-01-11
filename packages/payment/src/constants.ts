@@ -11,7 +11,7 @@ export const USDC_E_CONFIG: Record<SupportedChainId, TokenConfig> = {
     symbol: 'USDC.E',
     decimals: 6,
     domainName: 'Bridged USDC (Stargate)',
-    domainVersion: '1',
+    domainVersion: '2',
   },
   // Cronos Testnet
   338: {
@@ -29,7 +29,7 @@ export const USDC_E_CONFIG: Record<SupportedChainId, TokenConfig> = {
 export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
   25: {
     chainId: 25,
-    networkId: 'cronos',
+    networkId: 'cronos-mainnet',
     usdce: USDC_E_CONFIG[25],
     rpcUrl: 'https://evm.cronos.org',
     officialFacilitatorUrl: 'https://facilitator.cronoslabs.org/v2/x402',
@@ -47,7 +47,7 @@ export const CHAIN_CONFIGS: Record<SupportedChainId, ChainConfig> = {
  * Chain ID to network ID mapping
  */
 export const CHAIN_TO_NETWORK: Record<SupportedChainId, NetworkId> = {
-  25: 'cronos',
+  25: 'cronos-mainnet',
   338: 'cronos-testnet',
 } as const
 
@@ -55,7 +55,7 @@ export const CHAIN_TO_NETWORK: Record<SupportedChainId, NetworkId> = {
  * Network ID to chain ID mapping
  */
 export const NETWORK_TO_CHAIN: Record<NetworkId, SupportedChainId> = {
-  'cronos': 25,
+  'cronos-mainnet': 25,
   'cronos-testnet': 338,
 } as const
 

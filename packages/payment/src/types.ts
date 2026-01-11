@@ -8,7 +8,7 @@ export type SupportedChainId = 25 | 338
 /**
  * Network string identifiers
  */
-export type NetworkId = 'cronos' | 'cronos-testnet'
+export type NetworkId = 'cronos-mainnet' | 'cronos-testnet'
 
 /**
  * Token configuration

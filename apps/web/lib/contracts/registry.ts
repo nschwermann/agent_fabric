@@ -75,7 +75,7 @@ const knownContractsRegistry: Record<string, KnownContract> = {
     type: 'token',
     eip712Domain: {
       name: 'Bridged USDC (Stargate)',
-      version: '1',
+      version: '2',
     },
     supportedTypes: ['TransferWithAuthorization', 'ReceiveWithAuthorization', 'Permit'],
   },

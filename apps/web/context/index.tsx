@@ -143,8 +143,8 @@ if (projectId) {
   createAppKit({
     adapters: [wagmiAdapter],
     projectId,
-    networks: [cronosTestnet, cronos],
-    defaultNetwork: cronosTestnet,
+    networks: [cronos, cronosTestnet],
+    defaultNetwork: cronos,
     metadata,
     siwx,
     features: {

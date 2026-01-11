@@ -21,7 +21,7 @@ export const chainConfigs: Record<number, ChainConfig> = {
   // Cronos Mainnet
   25: {
     chainId: 25,
-    name: 'cronos',
+    name: 'cronos-mainnet',
     officialFacilitatorUrl: SHARED_CHAIN_CONFIGS[25].officialFacilitatorUrl,
     usdcAddress: SHARED_CHAIN_CONFIGS[25].usdce.address,
     rpcUrl: SHARED_CHAIN_CONFIGS[25].rpcUrl,

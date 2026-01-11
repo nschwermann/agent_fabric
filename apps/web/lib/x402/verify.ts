@@ -46,12 +46,12 @@ export interface PaymentDetails {
 
 /**
  * Parse chain ID from network string
- * Supports both formats: "cronos-testnet" / "cronos" and "eip155:338" / "eip155:25"
+ * Supports both formats: "cronos-testnet" / "cronos-mainnet" and "eip155:338" / "eip155:25"
  */
 function parseChainId(network: string): number {
   // Handle Cronos network names
   if (network === 'cronos-testnet') return 338
-  if (network === 'cronos') return 25
+  if (network === 'cronos-mainnet') return 25
 
   // Handle CAIP-2 format (eip155:chainId)
   const parts = network.split(':')
@@ -109,7 +109,7 @@ export async function verifyPaymentWithFacilitator(
   }
 
   const chainId = parseChainId(header.network)
-  const network = chainId === 25 ? 'cronos' : 'cronos-testnet'
+  const network = chainId === 25 ? 'cronos-mainnet' : 'cronos-testnet'
 
   const verifyRequest = {
     x402Version: 1,
@@ -171,7 +171,7 @@ export async function settlePayment(
   }
 
   const chainId = parseChainId(header.network)
-  const network = chainId === 25 ? 'cronos' : 'cronos-testnet'
+  const network = chainId === 25 ? 'cronos-mainnet' : 'cronos-testnet'
 
   const settlementRequest = {
     x402Version: 1,
@@ -342,7 +342,7 @@ export interface PaymentRequirements {
  * Per Cronos x402 spec, these go in the response body, not headers.
  */
 export function buildPaymentRequirements(details: PaymentDetails): PaymentRequirements {
-  const network = details.chainId === 25 ? 'cronos' : 'cronos-testnet'
+  const network = details.chainId === 25 ? 'cronos-mainnet' : 'cronos-testnet'
 
   return {
     scheme: 'exact',

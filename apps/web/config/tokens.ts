@@ -67,4 +67,4 @@ export function getNativeConfig(chainId: number): ChainTokens['native'] {
 }
 
 // Default chain for the app
-export const defaultChainId = cronosTestnet.id
+export const defaultChainId = cronos.id

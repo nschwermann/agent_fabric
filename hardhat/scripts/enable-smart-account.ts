@@ -25,7 +25,7 @@ import { cronosTestnet, cronos } from "viem/chains";
 // AgentDelegator contract address by chain
 const AGENT_DELEGATOR_ADDRESSES: Record<number, Address> = {
   338: "0xA8734aA1db20bdc08fCf4E7C8657BF37f3c2e0b3", // Cronos Testnet
-  // 25: "0x...", // Cronos Mainnet - add when deployed
+  25: "0x42592635fF346142c47351787134C9B1a21e71EC", // Cronos Mainnet - add when deployed
 };
 
 async function main() {

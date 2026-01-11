@@ -20,7 +20,7 @@ import {
  *   paymentHeader: string (base64),
  *   paymentRequirements: {
  *     scheme: 'exact',
- *     network: 'cronos' | 'cronos-testnet',
+ *     network: 'cronos-mainnet' | 'cronos-testnet',
  *     payTo: Address,
  *     asset: Address,
  *     maxAmountRequired: string,
