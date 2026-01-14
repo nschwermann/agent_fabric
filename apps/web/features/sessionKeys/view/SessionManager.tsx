@@ -1,7 +1,7 @@
 'use client'
 
-import { useMemo } from 'react'
-import { Key, Trash2, Clock, Loader2, AlertTriangle, ExternalLink } from 'lucide-react'
+import { useMemo, useState } from 'react'
+import { Key, Trash2, Clock, Loader2, AlertTriangle, ExternalLink, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useSmartAccount } from '@/features/smartAccount/model/useSmartAccount'
@@ -11,6 +11,7 @@ import { ScopesSummaryBadges } from './ScopeApprovalCard'
 import { getDefaultScope } from '@/lib/sessionKeys/scopeTemplates'
 import { deserializeScope, type SerializedSessionScope } from '@/lib/sessionKeys/types'
 import { useConnection } from 'wagmi'
+import { GenerateWalletModal } from './GenerateWalletModal'
 
 /**
  * Session management component
@@ -24,10 +25,11 @@ import { useConnection } from 'wagmi'
  */
 export function SessionManager() {
   const { chainId } = useConnection()
-  const { isEnabled, enable, status: smartAccountStatus, delegatedTo, isLoading: isSmartAccountLoading } = useSmartAccount()
+  const { isEnabled, status: smartAccountStatus, delegatedTo } = useSmartAccount()
   const { sessions, isLoading: isLoadingSessions, refresh } = useSessions()
   const { grantSession, status: grantStatus, isLoading: isGranting } = useGrantSession()
   const { revokeSession, isLoading: isRevoking } = useRevokeSession()
+  const [showGenerateModal, setShowGenerateModal] = useState(false)
 
   // Check if there's already an active x402 session
   const hasActiveSession = useMemo(() => sessions.length > 0, [sessions])
@@ -56,86 +58,103 @@ export function SessionManager() {
     }
   }
 
-  // Incompatible delegation - show warning
+  // Incompatible delegation - show warning and generate wallet option
   if (smartAccountStatus === 'incompatible_delegation') {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Key className="size-5" />
-            x402 Payments
-          </CardTitle>
-          <CardDescription>
-            Your wallet has an incompatible smart account
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="rounded-lg border border-amber-200 bg-amber-50 p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="size-5 text-amber-600 mt-0.5 shrink-0" />
-              <div className="space-y-1">
-                <p className="font-medium text-amber-800">Incompatible Smart Account</p>
-                <p className="text-sm text-amber-700">
-                  Your wallet is delegated to a different smart account contract that isn't compatible with this platform.
-                </p>
-                {delegatedTo && (
-                  <p className="text-xs text-amber-600 font-mono break-all">
-                    Current: {delegatedTo}
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="size-5" />
+              x402 Payments
+            </CardTitle>
+            <CardDescription>
+              Your wallet has an incompatible smart account
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border border-amber-200 bg-amber-50 dark:bg-amber-950/20 dark:border-amber-900 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="size-5 text-amber-600 mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-medium text-amber-800 dark:text-amber-200">Incompatible Smart Account</p>
+                  <p className="text-sm text-amber-700 dark:text-amber-300">
+                    Your wallet is delegated to a different smart account contract that isn&apos;t compatible with this platform.
                   </p>
-                )}
+                  {delegatedTo && (
+                    <p className="text-xs text-amber-600 dark:text-amber-400 font-mono break-all">
+                      Current: {delegatedTo}
+                    </p>
+                  )}
+                </div>
               </div>
             </div>
+            <div className="rounded-lg border bg-muted/50 p-4 space-y-2">
+              <p className="font-medium text-sm">Solution</p>
+              <p className="text-sm text-muted-foreground">
+                Generate a new wallet with the correct smart account enabled.
+              </p>
+            </div>
             <Button
-              onClick={enable}
-              disabled={isSmartAccountLoading}
+              onClick={() => setShowGenerateModal(true)}
               className="w-full"
-              variant="outline"
             >
-              {isSmartAccountLoading ? (
-                <>
-                  <Loader2 className="size-4 animate-spin mr-2" />
-                  Re-delegating...
-                </>
-              ) : (
-                'Re-delegate to x402'
-              )}
+              <Wallet className="size-4 mr-2" />
+              Generate Smart Account Wallet
             </Button>
-          </div>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+
+        <GenerateWalletModal
+          open={showGenerateModal}
+          onOpenChange={setShowGenerateModal}
+        />
+      </>
     )
   }
 
-  // Smart account not enabled - show prompt
+  // Smart account not enabled - show wallet generation prompt
   if (!isEnabled) {
     return (
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Key className="size-5" />
-            x402 Payments
-          </CardTitle>
-          <CardDescription>
-            Enable Smart Account to use automated API payments
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button
-            onClick={enable}
-            disabled={smartAccountStatus === 'enabling'}
-            className="w-full"
-          >
-            {smartAccountStatus === 'enabling' ? (
-              <>
-                <Loader2 className="size-4 animate-spin mr-2" />
-                Enabling...
-              </>
-            ) : (
-              'Enable Smart Account'
-            )}
-          </Button>
-        </CardContent>
-      </Card>
+      <>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Key className="size-5" />
+              x402 Payments
+            </CardTitle>
+            <CardDescription>
+              Smart account required for automated API payments
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="rounded-lg border bg-muted/50 p-4 space-y-3">
+              <div className="flex items-start gap-3">
+                <Wallet className="size-5 text-muted-foreground mt-0.5 shrink-0" />
+                <div className="space-y-1">
+                  <p className="font-medium text-sm">Smart Account Required</p>
+                  <p className="text-sm text-muted-foreground">
+                    Your wallet needs EIP-7702 smart account support for session keys and x402 payments.
+                    Most wallets don&apos;t support this yet, but we can generate a new wallet with smart account enabled.
+                  </p>
+                </div>
+              </div>
+            </div>
+            <Button
+              onClick={() => setShowGenerateModal(true)}
+              className="w-full"
+            >
+              <Wallet className="size-4 mr-2" />
+              Generate Smart Account Wallet
+            </Button>
+          </CardContent>
+        </Card>
+
+        <GenerateWalletModal
+          open={showGenerateModal}
+          onOpenChange={setShowGenerateModal}
+        />
+      </>
     )
   }
 
