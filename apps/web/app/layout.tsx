@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Route 402",
-  description: "Decentralized API marketplace with x402 payments on Cronos",
+  title: "Agent402",
+  description: "AI-powered API marketplace with automatic crypto payments on Cronos. Enable your AI agents to pay for APIs autonomously with scoped session keys.",
 };
 
 export default async function RootLayout({

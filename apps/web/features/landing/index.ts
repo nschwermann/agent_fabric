@@ -1,0 +1,6 @@
+export { LandingPage } from './view/LandingPage'
+export { HeroSection } from './view/HeroSection'
+export { FeatureSection } from './view/FeatureSection'
+export { HowItWorksSection } from './view/HowItWorksSection'
+export { CtaSection } from './view/CtaSection'
+export { MarketplacePreview } from './view/MarketplacePreview'

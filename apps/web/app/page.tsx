@@ -1,21 +1,19 @@
 import { Suspense } from 'react'
 import { Loader2 } from 'lucide-react'
-import { MarketplaceView } from '@/features/marketplace'
+import { LandingPage } from '@/features/landing'
 
-function MarketplaceLoading() {
+function LandingLoading() {
   return (
-    <div className="container py-8">
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="size-8 animate-spin text-muted-foreground" />
-      </div>
+    <div className="flex items-center justify-center min-h-[50vh]">
+      <Loader2 className="size-8 animate-spin text-muted-foreground" />
     </div>
   )
 }
 
 export default function Page() {
   return (
-    <Suspense fallback={<MarketplaceLoading />}>
-      <MarketplaceView />
+    <Suspense fallback={<LandingLoading />}>
+      <LandingPage />
     </Suspense>
   )
 }

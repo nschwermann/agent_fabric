@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Plus, LayoutDashboard, Store, Banknote } from 'lucide-react'
+import { Plus, LayoutDashboard, Store, Home, Server, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { UserStatus } from '@/features/user/view/UserStatus'
@@ -10,8 +10,10 @@ import { useUser } from '@/context/user'
 import { cn } from '@/lib/utils'
 
 const navLinks = [
-  { href: '/', label: 'Explore', icon: Store },
-  { href: '/pay', label: 'Pay', icon: Banknote },
+  { href: '/', label: 'Home', icon: Home },
+  { href: '/explore', label: 'APIs', icon: Store },
+  { href: '/mcp-servers', label: 'MCP Servers', icon: Server },
+  { href: '/workflows', label: 'Workflows', icon: Workflow },
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard, authRequired: true },
 ]
 
@@ -26,8 +28,8 @@ export function Header() {
         <div className="flex items-center gap-6">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-1.5 font-semibold text-xl">
-            <span className="text-foreground">Route</span>
-            <span className="text-primary/60 font-bold">402</span>
+            <span className="text-foreground">Agent</span>
+            <span className="text-primary/60 dark:text-primary font-bold">402</span>
           </Link>
 
           {/* Navigation */}
