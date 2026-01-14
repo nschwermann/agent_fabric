@@ -47,8 +47,7 @@ export function parsePaymentHeader(headerValue: string): PaymentHeader {
     const decoded = atob(headerValue)
     const parsed = JSON.parse(decoded) as PaymentHeader
     return parsed
-  } catch (error) {
-    console.error('[Facilitator] Failed to parse payment header:', error)
+  } catch {
     throw new Error('Invalid payment header format')
   }
 }
@@ -86,19 +85,6 @@ async function verifySmartAccountSignature(
   // Unwrap EIP-6492 to get inner signature
   const innerSignature = unwrapEIP6492(signature)
 
-  // Calculate byte length: remove "0x" prefix, divide hex chars by 2
-  const sigByteLength = (innerSignature.length - 2) / 2
-
-  console.log('[Facilitator] Verifying smart account signature:', {
-    from,
-    hash,
-    signatureByteLength: sigByteLength,
-    signatureFormat: sigByteLength === 65 ? 'EOA (65-byte)' :
-                     sigByteLength === 97 ? 'Session ERC-4337 (97-byte)' :
-                     sigByteLength === 149 ? 'Session EIP-1271 (149-byte)' :
-                     `Unknown (${sigByteLength}-byte)`,
-  })
-
   try {
     const result = await publicClient.readContract({
       address: from,
@@ -109,11 +95,6 @@ async function verifySmartAccountSignature(
 
     const isValid = result === EIP1271_MAGIC_VALUE
 
-    console.log('[Facilitator] isValidSignature result:', {
-      result,
-      isValid,
-    })
-
     if (!isValid) {
       return {
         isValid: false,
@@ -123,7 +104,6 @@ async function verifySmartAccountSignature(
 
     return { isValid: true }
   } catch (error) {
-    console.error('[Facilitator] isValidSignature call failed:', error)
     return {
       isValid: false,
       reason: `isValidSignature call failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
@@ -145,9 +125,6 @@ async function verifyWithOfficialFacilitator(
     paymentRequirements,
   }
 
-  console.log('[Facilitator] Forwarding to official facilitator:', facilitatorUrl)
-  console.log('[Facilitator] Verify request:', JSON.stringify(verifyRequest, null, 2))
-
   try {
     const response = await fetch(`${facilitatorUrl}/verify`, {
       method: 'POST',
@@ -159,15 +136,13 @@ async function verifyWithOfficialFacilitator(
     })
 
     const result = await response.json()
-    console.log('[Facilitator] Official facilitator response:', result)
 
     return {
       isValid: result.isValid === true,
       invalidReason: result.invalidReason,
       signatureType: 'eoa',
     }
-  } catch (error) {
-    console.error('[Facilitator] Official facilitator request failed:', error)
+  } catch {
     return {
       isValid: false,
       invalidReason: 'Facilitator request failed',
@@ -195,61 +170,34 @@ export async function verifyPayment(
     // Parse the payment header
     const header = parsePaymentHeader(paymentHeaderBase64)
 
-    console.log('[Facilitator] Decoded payment header:', {
-      x402Version: header.x402Version,
-      scheme: header.scheme,
-      network: header.network,
-      from: header.payload.from,
-      to: header.payload.to,
-      value: header.payload.value,
-      asset: header.payload.asset,
-    })
-
-    // Log full transferWithAuthorization params for debugging
-    console.log('[Facilitator] transferWithAuthorization params:', {
-      from: header.payload.from,
-      to: header.payload.to,
-      value: header.payload.value,
-      validAfter: header.payload.validAfter,
-      validBefore: header.payload.validBefore,
-      nonce: header.payload.nonce,
-      signature: header.payload.signature,
-    })
-
     // Check x402 version
     if (header.x402Version !== 1) {
-      console.error('[Facilitator] Unsupported x402 version:', header.x402Version)
       return null
     }
 
     // Check scheme
     if (header.scheme !== 'exact') {
-      console.error('[Facilitator] Unsupported scheme:', header.scheme)
       return null
     }
 
     // Verify amount matches
     const paymentAmount = parseInt(header.payload.value, 10)
     if (paymentAmount < expectedAmount) {
-      console.error('[Facilitator] Insufficient payment. Expected:', expectedAmount, 'Got:', paymentAmount)
       return null
     }
 
     // Verify recipient matches
     if (header.payload.to.toLowerCase() !== expectedRecipient.toLowerCase()) {
-      console.error('[Facilitator] Wrong recipient. Expected:', expectedRecipient, 'Got:', header.payload.to)
       return null
     }
 
     // Check for replay attack
     const paymentNonce = header.payload.nonce
     if (!paymentNonce) {
-      console.error('[Facilitator] Missing payment nonce')
       return null
     }
 
     if (await paymentNonceRepository.isUsed(paymentNonce)) {
-      console.warn('[Facilitator] Payment nonce already used:', paymentNonce)
       return null
     }
 
@@ -258,10 +206,7 @@ export async function verifyPayment(
     const chainId = parseChainId(header.network)
     const chainConfig = getChainConfig(chainId)
 
-    console.log('[Facilitator] Detected signature type:', signatureType, 'for chain:', chainId)
-
     if (!chainConfig) {
-      console.error('[Facilitator] Unsupported chain:', chainId)
       return null
     }
 
@@ -307,11 +252,8 @@ export async function verifyPayment(
     }
 
     if (!verifyResult.isValid) {
-      console.error('[Facilitator] Verification failed:', verifyResult.invalidReason)
       return null
     }
-
-    console.log('[Facilitator] Verified payment for address:', header.payload.from)
 
     return {
       address: header.payload.from as Address,
@@ -319,8 +261,7 @@ export async function verifyPayment(
       paymentHeader: header,
       signatureType,
     }
-  } catch (error) {
-    console.error('[Facilitator] Payment verification failed:', error)
+  } catch {
     return null
   }
 }

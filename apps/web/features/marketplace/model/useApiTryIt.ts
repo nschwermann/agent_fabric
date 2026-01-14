@@ -2,7 +2,7 @@
 
 import { useState, useCallback } from 'react'
 import { useSignTypedData, useConnection } from 'wagmi'
-import { type Address, hashTypedData, recoverTypedDataAddress } from 'viem'
+import type { Address } from 'viem'
 import type { VariableDefinition, VariableType } from '@/features/proxy/model/variables'
 import {
   EIP3009_TYPES,
@@ -177,16 +177,6 @@ export function useApiTryIt({
       validitySeconds: maxTimeoutSeconds,
     })
 
-    console.log('[x402 Session] Requesting session signature:', {
-      sessionId,
-      message: {
-        ...message,
-        value: message.value.toString(),
-        validAfter: message.validAfter.toString(),
-        validBefore: message.validBefore.toString(),
-      },
-    })
-
     // Request signature from server using session key
     const signResponse = await fetch(`/api/sessions/${sessionId}/sign`, {
       method: 'POST',
@@ -209,7 +199,6 @@ export function useApiTryIt({
     }
 
     const { signature } = await signResponse.json()
-    console.log('[x402 Session] Session signature obtained, length:', signature.length)
 
     // Build payment header with session signature (149 bytes)
     const header = buildPaymentHeader({
@@ -244,47 +233,12 @@ export function useApiTryIt({
       validitySeconds: maxTimeoutSeconds,
     })
 
-    console.log('[x402 Client] Signing payment with domain:', domain)
-    console.log('[x402 Client] Signing payment with message:', {
-      ...message,
-      value: message.value.toString(),
-      validAfter: message.validAfter.toString(),
-      validBefore: message.validBefore.toString(),
-    })
-
     const signature = await signTypedData({
       domain,
       types: EIP3009_TYPES,
       primaryType: 'TransferWithAuthorization',
       message,
     })
-
-    console.log('[x402 Client] Signature:', signature)
-    console.log('[x402 Client] Nonce:', message.nonce)
-
-    // Debug: Verify the signature locally before sending
-    try {
-      const hash = hashTypedData({
-        domain,
-        types: EIP3009_TYPES,
-        primaryType: 'TransferWithAuthorization',
-        message,
-      })
-      console.log('[x402 Client] EIP-712 hash:', hash)
-
-      const recoveredAddress = await recoverTypedDataAddress({
-        domain,
-        types: EIP3009_TYPES,
-        primaryType: 'TransferWithAuthorization',
-        message,
-        signature,
-      })
-      console.log('[x402 Client] Recovered address:', recoveredAddress)
-      console.log('[x402 Client] Expected address:', from)
-      console.log('[x402 Client] Signature valid:', recoveredAddress.toLowerCase() === from.toLowerCase())
-    } catch (verifyError) {
-      console.error('[x402 Client] Local verification failed:', verifyError)
-    }
 
     // Build payment header using shared utility
     const header = buildPaymentHeader({
@@ -293,8 +247,6 @@ export function useApiTryIt({
       asset,
       chainId: reqChainId,
     })
-
-    console.log('[x402 Client] Payment header:', JSON.stringify(header, null, 2))
 
     // Encode to base64 using shared utility
     return encodePaymentHeader(header)
@@ -329,8 +281,6 @@ export function useApiTryIt({
     try {
       const typedVariables = convertVariables(variables, variablesSchema)
 
-      console.log('[x402 Client] Making initial request to:', proxyUrl)
-
       // Determine if we should send a body (POST, PUT, PATCH)
       const shouldSendBody = ['POST', 'PUT', 'PATCH'].includes(httpMethod.toUpperCase())
 
@@ -343,8 +293,6 @@ export function useApiTryIt({
         },
         ...(shouldSendBody && requestBody ? { body: requestBody } : {}),
       })
-
-      console.log('[x402 Client] Initial response status:', initialResponse.status)
 
       // If not 402, the request went through without payment
       if (initialResponse.status !== 402) {
@@ -361,8 +309,6 @@ export function useApiTryIt({
       // Step 2: Extract payment requirements from 402 response body (per Cronos x402 spec)
       const responseData = await initialResponse.json()
       const { paymentRequirements } = responseData
-
-      console.log('[x402 Client] Payment requirements:', paymentRequirements)
 
       if (!paymentRequirements || !paymentRequirements.payTo || !paymentRequirements.asset || !paymentRequirements.maxAmountRequired) {
         throw new Error('Invalid payment requirements from server')
@@ -382,8 +328,6 @@ export function useApiTryIt({
       // Step 3: Create signed payment header
       const paymentHeaderBase64 = await createPaymentHeader(requirements, address)
 
-      console.log('[x402 Client] Sending payment with X-PAYMENT header')
-
       // Step 4: Make the actual request with payment
       const paidResponse = await fetch(proxyUrl, {
         method: httpMethod,
@@ -395,10 +339,7 @@ export function useApiTryIt({
         ...(shouldSendBody && requestBody ? { body: requestBody } : {}),
       })
 
-      console.log('[x402 Client] Paid response status:', paidResponse.status)
-
       const body = await paidResponse.text()
-      console.log('[x402 Client] Paid response body:', body)
 
       setResponse({
         status: paidResponse.status,

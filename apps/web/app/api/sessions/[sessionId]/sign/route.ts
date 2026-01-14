@@ -139,11 +139,6 @@ export const POST = withAuth(async (user, request, context) => {
     }, { status: 403 })
   }
 
-  // Log which scope matched (for debugging)
-  if (matchedScopeName) {
-    console.log('[sign] Token approved via scope:', matchedScopeName)
-  }
-
   try {
     // Decrypt the session key private key
     const decrypted = decryptHybrid(session.encryptedPrivateKey)
@@ -152,10 +147,6 @@ export const POST = withAuth(async (user, request, context) => {
     // Verify we got the right key
     const account = privateKeyToAccount(privateKey)
     if (account.address.toLowerCase() !== session.sessionKeyAddress.toLowerCase()) {
-      console.error('[sign] Session key mismatch:', {
-        expected: session.sessionKeyAddress,
-        got: account.address,
-      })
       return NextResponse.json({ error: 'Session key mismatch' }, { status: 500 })
     }
 
@@ -168,15 +159,6 @@ export const POST = withAuth(async (user, request, context) => {
       validBefore: BigInt(validBefore),
       nonce: nonce as `0x${string}`,
     }
-
-    console.log('[sign] Signing EIP-3009 with 149-byte format:', {
-      sessionId,
-      from,
-      to,
-      value,
-      chainId,
-      tokenAddress,
-    })
 
     // Step 1: Compute the structHash for TransferWithAuthorization
     // This is the inner hash that will be used for preimage verification on-chain
@@ -205,17 +187,8 @@ export const POST = withAuth(async (user, request, context) => {
       ecdsaSignature,
     })
 
-    console.log('[sign] 149-byte signature created:', {
-      sessionId: session.sessionId,
-      tokenAddress,
-      structHash,
-      ecdsaSignatureLength: (ecdsaSignature.length - 2) / 2,
-      signatureLength: (signature.length - 2) / 2,
-    })
-
     return NextResponse.json({ signature })
-  } catch (error) {
-    console.error('[sign] Error signing:', error)
+  } catch {
     return NextResponse.json({ error: 'Failed to sign' }, { status: 500 })
   }
 })

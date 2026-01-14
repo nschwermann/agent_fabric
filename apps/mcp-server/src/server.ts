@@ -140,13 +140,7 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     const slugParam = req.params.slug
     const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam
 
-    console.log(`[MCP Middleware] ${req.method} /mcp/${slug}`, {
-      hasAuthHeader: !!req.headers.authorization,
-      hasSessionId: !!req.headers['mcp-session-id'],
-    })
-
     if (!slug) {
-      console.log('[MCP Middleware] Missing slug')
       res.status(400).json({ error: 'Missing MCP server slug' })
       return
     }
@@ -159,18 +153,14 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     if (sessionId) {
       const session = sessions.get(sessionId)
       if (session) {
-        console.log(`[MCP Middleware] Using existing session: ${sessionId}`)
         // Verify the session is for the correct slug
         if (session.slug !== slug) {
-          console.log(`[MCP Middleware] Session slug mismatch: ${session.slug} vs ${slug}`)
           res.status(403).json({ error: 'Session does not match requested slug' })
           return
         }
         req.mcpAuth = session.auth
         next()
         return
-      } else {
-        console.log(`[MCP Middleware] Session ID provided but not found: ${sessionId}`)
       }
     }
 
@@ -179,7 +169,6 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     const auth = await validateBearerToken(authHeader)
 
     if (!auth) {
-      console.log('[MCP Middleware] Token validation failed, returning 401')
       // MCP OAuth requires WWW-Authenticate header with resource_metadata URL
       // See: https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/authorization/
       // Use slug-specific resource metadata URL so client discovers slug-aware authorization endpoint
@@ -193,15 +182,8 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       return
     }
 
-    console.log('[MCP Middleware] Token validated:', {
-      userId: auth.user.id,
-      tokenMcpSlug: auth.mcpSlug,
-      requestedSlug: slug,
-    })
-
     // Validate slug binding if token is scoped to a specific slug
     if (auth.mcpSlug && auth.mcpSlug !== slug) {
-      console.log(`[MCP Middleware] Slug mismatch: token=${auth.mcpSlug}, requested=${slug}`)
       res.status(403).json({
         error: 'forbidden',
         error_description: `Token is scoped to slug "${auth.mcpSlug}", not "${slug}"`,
@@ -209,7 +191,6 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       return
     }
 
-    console.log('[MCP Middleware] Auth successful, passing to handler')
     req.mcpAuth = auth
     next()
   }
@@ -296,15 +277,9 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     const auth = req.mcpAuth!
     const sessionId = req.headers['mcp-session-id'] as string | undefined
 
-    console.log('[MCP POST] Handling request for slug:', slug, {
-      hasSessionId: !!sessionId,
-      bodyMethod: req.body?.method,
-    })
-
     try {
       // Check for existing session
       if (sessionId && sessions.has(sessionId)) {
-        console.log('[MCP POST] Using existing session:', sessionId)
         const session = sessions.get(sessionId)!
         await session.transport.handleRequest(
           req as unknown as IncomingMessage,
@@ -315,20 +290,12 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       }
 
       // Load server configuration
-      console.log('[MCP POST] Loading server configuration for slug:', slug)
       const serverConfig = await toolRegistry.loadToolsForSlug(slug)
 
       if (!serverConfig) {
-        console.log('[MCP POST] Server not found for slug:', slug)
         res.status(404).json({ error: 'MCP server not found' })
         return
       }
-
-      console.log('[MCP POST] Server config loaded:', {
-        name: serverConfig.name,
-        toolCount: serverConfig.tools.length,
-        workflowCount: serverConfig.workflowTools.length,
-      })
 
       // Create new MCP server for this session
       const mcpServer = createMcpServer(serverConfig, auth)
@@ -337,8 +304,6 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       const transport = new StreamableHTTPServerTransport({
         sessionIdGenerator: () => randomUUID(),
         onsessioninitialized: (newSessionId) => {
-          console.log(`[MCP] Session initialized: ${newSessionId} for slug: ${slug}`)
-
           sessions.set(newSessionId, {
             transport,
             server: mcpServer,
@@ -356,7 +321,6 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       transport.onclose = () => {
         const sid = transport.sessionId
         if (sid) {
-          console.log(`[MCP] Session closed: ${sid}`)
           sessions.delete(sid)
         }
       }
@@ -367,8 +331,7 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
         res as unknown as ServerResponse,
         req.body
       )
-    } catch (error) {
-      console.error('[MCP] Error handling POST request:', error)
+    } catch {
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' })
       }
@@ -393,8 +356,7 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
         req as unknown as IncomingMessage,
         res as unknown as ServerResponse
       )
-    } catch (error) {
-      console.error('[MCP] Error handling GET request:', error)
+    } catch {
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' })
       }
@@ -420,8 +382,7 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
         res as unknown as ServerResponse
       )
       sessions.delete(sessionId)
-    } catch (error) {
-      console.error('[MCP] Error handling DELETE request:', error)
+    } catch {
       if (!res.headersSent) {
         res.status(500).json({ error: 'Internal server error' })
       }
@@ -442,14 +403,11 @@ export function getActiveSessions(): Map<string, McpSession> {
  * Graceful shutdown - close all sessions
  */
 export async function shutdown(): Promise<void> {
-  console.log('[MCP] Shutting down, closing all sessions...')
-
-  for (const [sessionId, session] of sessions) {
+  for (const [, session] of sessions) {
     try {
       await session.server.close()
-      console.log(`[MCP] Closed session: ${sessionId}`)
-    } catch (error) {
-      console.error(`[MCP] Error closing session ${sessionId}:`, error)
+    } catch {
+      // Ignore errors during shutdown
     }
   }
 

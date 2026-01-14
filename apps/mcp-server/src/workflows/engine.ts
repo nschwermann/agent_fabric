@@ -9,8 +9,8 @@ import {
 import { executeHttpStep } from './steps/http'
 import { executeOnchainStep, executeOnchainBatchStep } from './steps/onchain'
 
-// Workflow debug logging
-const DEBUG = process.env.WORKFLOW_DEBUG === 'true' || true // Enable by default for now
+// Workflow debug logging - disabled by default for production
+const DEBUG = process.env.WORKFLOW_DEBUG === 'true'
 
 function logDebug(category: string, message: string, data?: unknown): void {
   if (!DEBUG) return

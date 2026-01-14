@@ -83,10 +83,8 @@ export function parsePaymentHeader(headerValue: string): PaymentHeader {
   try {
     const decoded = atob(headerValue)
     const parsed = JSON.parse(decoded) as PaymentHeader
-    console.log('[x402 Server] Parsed payment header:', JSON.stringify(parsed, null, 2))
     return parsed
   } catch (error) {
-    console.error('[x402 Server] Failed to parse payment header:', error)
     throw new Error('Invalid payment header format')
   }
 }
@@ -104,7 +102,6 @@ export async function verifyPaymentWithFacilitator(
   const facilitatorUrl = process.env.NEXT_PUBLIC_X402_FACILITATOR_URL
 
   if (!facilitatorUrl) {
-    console.error('[x402 Server] NEXT_PUBLIC_X402_FACILITATOR_URL is not configured')
     return { isValid: false, invalidReason: 'Facilitator URL not configured' }
   }
 
@@ -126,9 +123,6 @@ export async function verifyPaymentWithFacilitator(
     },
   }
 
-  console.log('[x402 Server] Verifying with facilitator:', facilitatorUrl)
-  console.log('[x402 Server] Verify request:', JSON.stringify(verifyRequest, null, 2))
-
   try {
     const response = await fetch(`${facilitatorUrl}/verify`, {
       method: 'POST',
@@ -140,14 +134,12 @@ export async function verifyPaymentWithFacilitator(
     })
 
     const result = await response.json()
-    console.log('[x402 Server] Facilitator verify response:', JSON.stringify(result, null, 2))
 
     return {
       isValid: result.isValid === true,
       invalidReason: result.invalidReason,
     }
-  } catch (error) {
-    console.error('[x402 Server] Facilitator verify request failed:', error)
+  } catch {
     return { isValid: false, invalidReason: 'Facilitator request failed' }
   }
 }
@@ -166,7 +158,6 @@ export async function settlePayment(
   const facilitatorUrl = process.env.NEXT_PUBLIC_X402_FACILITATOR_URL
 
   if (!facilitatorUrl) {
-    console.error('[x402 Server] NEXT_PUBLIC_X402_FACILITATOR_URL is not configured')
     return null
   }
 
@@ -189,7 +180,6 @@ export async function settlePayment(
   }
 
   // First verify with facilitator to get detailed error if any
-  console.log('[x402 Server] Pre-verifying payment with facilitator...')
   const verifyResult = await verifyPaymentWithFacilitator(
     paymentHeaderBase64,
     header,
@@ -198,13 +188,8 @@ export async function settlePayment(
   )
 
   if (!verifyResult.isValid) {
-    console.error('[x402 Server] Facilitator verification failed:', verifyResult.invalidReason)
     return null
   }
-
-  console.log('[x402 Server] Facilitator verification passed, proceeding to settle...')
-  console.log('[x402 Server] Sending settlement request to facilitator:', facilitatorUrl)
-  console.log('[x402 Server] Settlement request:', JSON.stringify(settlementRequest, null, 2))
 
   try {
     const response = await fetch(`${facilitatorUrl}/settle`, {
@@ -217,25 +202,19 @@ export async function settlePayment(
     })
 
     const responseText = await response.text()
-    console.log('[x402 Server] Facilitator response status:', response.status)
-    console.log('[x402 Server] Facilitator response body:', responseText)
 
     if (!response.ok) {
-      console.error('[x402 Server] Facilitator settlement failed:', response.status, responseText)
       return null
     }
 
     const result = JSON.parse(responseText)
 
     if (result.event === 'payment.settled' && result.txHash) {
-      console.log('[x402 Server] Payment settled! TxHash:', result.txHash)
       return { txHash: result.txHash }
     }
 
-    console.error('[x402 Server] Unexpected facilitator response:', result)
     return null
-  } catch (error) {
-    console.error('[x402 Server] Facilitator request failed:', error)
+  } catch {
     return null
   }
 }
@@ -259,39 +238,33 @@ export async function verifyPayment(
 
     // Check x402 version
     if (header.x402Version !== 1) {
-      console.error('[x402 Server] Unsupported x402 version:', header.x402Version)
       return null
     }
 
     // Check scheme
     if (header.scheme !== 'exact') {
-      console.error('[x402 Server] Unsupported scheme:', header.scheme)
       return null
     }
 
     // Verify amount matches
     const paymentAmount = parseInt(header.payload.value, 10)
     if (paymentAmount < expectedAmount) {
-      console.error('[x402 Server] Insufficient payment. Expected:', expectedAmount, 'Got:', paymentAmount)
       return null
     }
 
     // Verify recipient matches
     if (header.payload.to.toLowerCase() !== expectedRecipient.toLowerCase()) {
-      console.error('[x402 Server] Wrong recipient. Expected:', expectedRecipient, 'Got:', header.payload.to)
       return null
     }
 
     // Use EIP-3009 nonce for replay protection (unique per payment authorization)
     const paymentNonce = header.payload.nonce
     if (!paymentNonce) {
-      console.error('[x402 Server] Missing payment nonce')
       return null
     }
 
     // Check for replay attack using the EIP-3009 nonce
     if (await paymentNonceRepository.isUsed(paymentNonce)) {
-      console.warn('[x402 Server] Payment nonce already used:', paymentNonce)
       return null
     }
 
@@ -304,11 +277,8 @@ export async function verifyPayment(
     )
 
     if (!verifyResult.isValid) {
-      console.error('[x402 Server] Facilitator verification failed:', verifyResult.invalidReason)
       return null
     }
-
-    console.log('[x402 Server] Facilitator verified payment for address:', header.payload.from)
 
     // Return verification result with parsed header for later settlement
     return {
@@ -316,8 +286,7 @@ export async function verifyPayment(
       paymentNonce,
       paymentHeader: header,
     }
-  } catch (error) {
-    console.error('[x402 Server] Payment verification failed:', error)
+  } catch {
     return null
   }
 }

@@ -13,8 +13,8 @@ import type { WorkflowContext } from '../resolver'
 import { resolveExpression, resolveAllExpressions } from '../resolver'
 import type { WorkflowExecutionDeps } from '../engine'
 
-// Debug logging
-const DEBUG = process.env.WORKFLOW_DEBUG === 'true' || true
+// Debug logging - disabled by default for production
+const DEBUG = process.env.WORKFLOW_DEBUG === 'true'
 
 function logDebug(category: string, message: string, data?: unknown): void {
   if (!DEBUG) return
