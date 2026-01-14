@@ -1,8 +1,8 @@
 'use client'
 
-import { useConnection } from 'wagmi'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAuthorization } from '../model/useAuthorization'
+import { useAuthorizationFlow } from '../model/useAuthorizationFlow'
 import { AuthorizationLoading } from './AuthorizationLoading'
 import { AuthorizationError } from './AuthorizationError'
 import { SmartAccountRequired } from './SmartAccountRequired'
@@ -13,7 +13,6 @@ import { NonEnforceableWarning } from './NonEnforceableWarning'
 import { AuthorizationActions } from './AuthorizationActions'
 import { RedirectInfo } from './RedirectInfo'
 import { WorkflowTargetsDisplay } from './WorkflowTargetsDisplay'
-import { cronosTestnet } from '@reown/appkit/networks'
 
 /**
  * Main view component for the OAuth authorization flow
@@ -25,12 +24,11 @@ import { cronosTestnet } from '@reown/appkit/networks'
  * - Main authorization form
  */
 export function AuthorizationView() {
-  const { chainId } = useConnection()
+  const authorization = useAuthorization()
+  const { step, effectiveChainId, error } = useAuthorizationFlow({ authorization })
+
   const {
     clientInfo,
-    isLoading,
-    error,
-    isSmartAccountEnabled,
     enableSmartAccount,
     smartAccountStatus,
     selectedScopeIds,
@@ -49,23 +47,20 @@ export function AuthorizationView() {
     canApprove,
     approveError,
     grantStatus,
-  } = useAuthorization()
-
-  // Use connected chain or default to Cronos Testnet
-  const effectiveChainId = chainId ?? cronosTestnet.id
+  } = authorization
 
   // Loading state
-  if (isLoading) {
+  if (step === 'loading') {
     return <AuthorizationLoading />
   }
 
   // Error state
-  if (error) {
-    return <AuthorizationError error={error} />
+  if (step === 'error') {
+    return <AuthorizationError error={error!} />
   }
 
   // Smart account not enabled
-  if (!isSmartAccountEnabled) {
+  if (step === 'smartAccountRequired') {
     return (
       <SmartAccountRequired
         onEnable={enableSmartAccount}
@@ -74,7 +69,7 @@ export function AuthorizationView() {
     )
   }
 
-  // No client info (shouldn't happen if no error, but guard anyway)
+  // No client info (shouldn't happen if step is 'ready', but guard anyway)
   if (!clientInfo) {
     return null
   }

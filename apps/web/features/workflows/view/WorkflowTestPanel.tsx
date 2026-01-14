@@ -1,6 +1,5 @@
 'use client'
 
-import { useState } from 'react'
 import { Play, Loader2, CheckCircle2, XCircle, AlertCircle, Info } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,10 +13,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import type { WorkflowDetail } from '../model/useWorkflows'
-
-interface TestInputs {
-  [key: string]: string
-}
+import { useWorkflowTest, type WorkflowTestResult } from '../model/useWorkflowTest'
 
 interface StepOutput {
   _simulated?: boolean
@@ -43,13 +39,6 @@ interface StepResult {
   duration?: number
 }
 
-interface TestResult {
-  success: boolean
-  steps: StepResult[]
-  output?: Record<string, unknown>
-  error?: string
-}
-
 // Check if a step output has unresolved expressions
 function hasUnresolvedExpressions(output: StepOutput | undefined): boolean {
   if (!output) return false
@@ -59,87 +48,13 @@ function hasUnresolvedExpressions(output: StepOutput | undefined): boolean {
 }
 
 export function WorkflowTestPanel({ workflow }: { workflow: WorkflowDetail }) {
-  const [inputs, setInputs] = useState<TestInputs>(() => {
-    // Initialize with defaults (convert to string for text inputs)
-    const initial: TestInputs = {}
-    for (const variable of workflow.inputSchema) {
-      initial[variable.name] = variable.default?.toString() ?? ''
-    }
-    return initial
-  })
-  const [isRunning, setIsRunning] = useState(false)
-  const [result, setResult] = useState<TestResult | null>(null)
-
-  const handleInputChange = (name: string, value: string) => {
-    setInputs((prev) => ({ ...prev, [name]: value }))
-  }
-
-  const validateInputs = (): { valid: boolean; errors: string[] } => {
-    const errors: string[] = []
-    for (const variable of workflow.inputSchema) {
-      const value = inputs[variable.name]
-      if (variable.required && !value) {
-        errors.push(`${variable.name} is required`)
-      }
-      if (value && variable.type === 'address' && !/^0x[a-fA-F0-9]{40}$/.test(value)) {
-        errors.push(`${variable.name} must be a valid address`)
-      }
-      if (value && variable.type === 'uint256' && !/^\d+$/.test(value)) {
-        errors.push(`${variable.name} must be a valid uint256`)
-      }
-      if (value && variable.type === 'number' && isNaN(Number(value))) {
-        errors.push(`${variable.name} must be a valid number`)
-      }
-    }
-    return { valid: errors.length === 0, errors }
-  }
-
-  const handleDryRun = async () => {
-    const validation = validateInputs()
-    if (!validation.valid) {
-      setResult({
-        success: false,
-        steps: [],
-        error: validation.errors.join(', '),
-      })
-      return
-    }
-
-    setIsRunning(true)
-    setResult(null)
-
-    try {
-      const response = await fetch(`/api/workflows/${workflow.id}/test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          inputs,
-          dryRun: true,
-        }),
-      })
-
-      const data = await response.json()
-
-      if (!response.ok) {
-        setResult({
-          success: false,
-          steps: [],
-          error: data.error || 'Test execution failed',
-        })
-        return
-      }
-
-      setResult(data)
-    } catch (error) {
-      setResult({
-        success: false,
-        steps: [],
-        error: error instanceof Error ? error.message : 'Test execution failed',
-      })
-    } finally {
-      setIsRunning(false)
-    }
-  }
+  const {
+    inputs,
+    setInput,
+    isRunning,
+    result,
+    runTest,
+  } = useWorkflowTest(workflow)
 
   const getStepStatusIcon = (status: StepResult['status'], hasUnresolved: boolean) => {
     if (hasUnresolved) {
@@ -188,7 +103,7 @@ export function WorkflowTestPanel({ workflow }: { workflow: WorkflowDetail }) {
                 <Input
                   id={variable.name}
                   value={inputs[variable.name] || ''}
-                  onChange={(e) => handleInputChange(variable.name, e.target.value)}
+                  onChange={(e) => setInput(variable.name, e.target.value)}
                   placeholder={
                     variable.type === 'address'
                       ? '0x...'
@@ -212,7 +127,7 @@ export function WorkflowTestPanel({ workflow }: { workflow: WorkflowDetail }) {
         {/* Run Button */}
         <Button
           className="w-full"
-          onClick={handleDryRun}
+          onClick={runTest}
           disabled={isRunning}
         >
           {isRunning ? (

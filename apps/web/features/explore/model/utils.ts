@@ -2,6 +2,9 @@
  * Utility functions for the explore feature
  */
 
+// Re-export formatPrice from centralized formatting module
+export { formatPrice } from '@/lib/formatting'
+
 /**
  * UUID regex pattern for validation
  */
@@ -12,29 +15,6 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  */
 export function isUUID(str: string): boolean {
   return UUID_REGEX.test(str)
-}
-
-/**
- * Format a price from smallest unit (1/1,000,000 of a dollar) to display format
- *
- * Examples:
- * - 100 => "$0.000100"
- * - 10000 => "$0.0100"
- * - 1000000 => "$1.00"
- * - 5000000 => "$5.00"
- */
-export function formatPrice(priceInSmallestUnit: number): string {
-  const price = priceInSmallestUnit / 1_000_000
-
-  if (price < 0.01) {
-    return `$${price.toFixed(6)}`
-  }
-
-  if (price < 1) {
-    return `$${price.toFixed(4)}`
-  }
-
-  return `$${price.toFixed(2)}`
 }
 
 /**

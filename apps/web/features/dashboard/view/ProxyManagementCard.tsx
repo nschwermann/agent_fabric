@@ -37,6 +37,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { MethodBadge } from '@/features/proxy/view/HttpMethodSelect'
 import { getCategoryById } from '@/features/proxy/model/tags'
+import { formatPrice, formatEarnings } from '@/lib/formatting'
 import type { ProxyWithMetrics } from '../model/types'
 import type { HttpMethod } from '@/features/proxy/model/variables'
 
@@ -46,21 +47,6 @@ interface ProxyManagementCardProps {
   onToggleVisibility: (id: string, isPublic: boolean) => Promise<void>
   isDeleting?: boolean
   isTogglingVisibility?: boolean
-}
-
-function formatPrice(priceInSmallestUnit: number): string {
-  const price = priceInSmallestUnit / 1_000_000
-  if (price < 0.01) return `$${price.toFixed(6)}`
-  if (price < 1) return `$${price.toFixed(4)}`
-  return `$${price.toFixed(2)}`
-}
-
-function formatEarnings(amountInSmallestUnit: number): string {
-  const amount = amountInSmallestUnit / 1_000_000
-  if (amount === 0) return '$0.00'
-  if (amount < 0.01) return `$${amount.toFixed(6)}`
-  if (amount < 1) return `$${amount.toFixed(4)}`
-  return `$${amount.toFixed(2)}`
 }
 
 export function ProxyManagementCard({

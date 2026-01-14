@@ -5,23 +5,13 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { getCategoryById } from '../model/tags'
 import { MethodBadge } from './HttpMethodSelect'
+import { formatPrice } from '@/lib/formatting'
 import type { Proxy } from '@/lib/collections/proxy'
 import type { HttpMethod } from '../model/variables'
 
 interface ProxyCardProps {
   proxy: Proxy
   href?: string
-}
-
-function formatPrice(priceInSmallestUnit: number): string {
-  const price = priceInSmallestUnit / 1_000_000
-  if (price < 0.01) {
-    return `$${price.toFixed(6)}`
-  }
-  if (price < 1) {
-    return `$${price.toFixed(4)}`
-  }
-  return `$${price.toFixed(2)}`
 }
 
 export function ProxyCard({ proxy, href }: ProxyCardProps) {

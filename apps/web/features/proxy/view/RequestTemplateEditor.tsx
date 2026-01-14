@@ -4,6 +4,7 @@ import { Plus } from 'lucide-react'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
 import { useMemo } from 'react'
+import { detectVariablesInTemplate, findMissingVariables } from '@/lib/utils/detectVariablesInTemplate'
 
 interface RequestTemplateEditorProps {
   value: string
@@ -30,16 +31,11 @@ export function RequestTemplateEditor({
   existingVariables = [],
   onAddVariables,
 }: RequestTemplateEditorProps) {
-  // Extract variables from template for display
-  const detectedVariables = useMemo(() => {
-    const matches = value.match(/\{\{(\w+)\}\}/g) || []
-    return [...new Set(matches.map((m) => m.slice(2, -2)))]
-  }, [value])
-
-  // Find variables that are detected but not yet in the schema
-  const missingVariables = useMemo(() => {
-    return detectedVariables.filter((v) => !existingVariables.includes(v))
-  }, [detectedVariables, existingVariables])
+  const detectedVariables = useMemo(() => detectVariablesInTemplate(value), [value])
+  const missingVariables = useMemo(
+    () => findMissingVariables(value, existingVariables),
+    [value, existingVariables]
+  )
 
   return (
     <div className="space-y-2">
@@ -106,16 +102,11 @@ export function QueryParamsEditor({
   existingVariables = [],
   onAddVariables,
 }: QueryParamsEditorProps) {
-  // Extract variables from template for display
-  const detectedVariables = useMemo(() => {
-    const matches = value.match(/\{\{(\w+)\}\}/g) || []
-    return [...new Set(matches.map((m) => m.slice(2, -2)))]
-  }, [value])
-
-  // Find variables that are detected but not yet in the schema
-  const missingVariables = useMemo(() => {
-    return detectedVariables.filter((v) => !existingVariables.includes(v))
-  }, [detectedVariables, existingVariables])
+  const detectedVariables = useMemo(() => detectVariablesInTemplate(value), [value])
+  const missingVariables = useMemo(
+    () => findMissingVariables(value, existingVariables),
+    [value, existingVariables]
+  )
 
   return (
     <div className="space-y-2">

@@ -2,6 +2,9 @@
  * Utility functions for the edit proxy feature
  */
 
+// Re-export formatPriceForDisplay from centralized formatting module
+export { formatPriceForDisplay } from '@/lib/formatting'
+
 /**
  * UUID v4 regex pattern
  */
@@ -19,20 +22,6 @@ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12
  */
 export function isValidUUID(value: string): boolean {
   return UUID_REGEX.test(value)
-}
-
-/**
- * Convert price from database format (smallest unit with 6 decimals) to display format
- *
- * @param priceInSmallestUnit - Price in USDC smallest unit (1 USDC = 1,000,000)
- * @returns Price as a string for form display
- *
- * @example
- * formatPriceForDisplay(1_000_000) // "1"
- * formatPriceForDisplay(500_000) // "0.5"
- */
-export function formatPriceForDisplay(priceInSmallestUnit: number): string {
-  return (priceInSmallestUnit / 1_000_000).toString()
 }
 
 /**

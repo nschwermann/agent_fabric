@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import type { SessionScope, ExecuteScope, EIP712Scope } from '@/lib/sessionKeys/types'
 import { isExecuteScope, isEIP712Scope } from '@/lib/sessionKeys/types'
 import type { Address } from 'viem'
-import { getKnownContract } from '@/lib/contracts'
+import { useKnownContractMetadata } from '@/features/sessionKeys/model'
 
 interface ScopeApprovalCardProps {
   scope: SessionScope
@@ -147,17 +147,17 @@ function ContractCard({
   supportedTypes?: string[]
 }) {
   // Look up known contract metadata
-  const knownContract = chainId ? getKnownContract(address, chainId) : null
+  const { contract, displayName } = useKnownContractMetadata(address, chainId)
 
   return (
     <div className="p-2 rounded bg-muted/50 text-sm space-y-2">
       {/* Top row: Logo, name, verified badge */}
       <div className="flex items-center gap-3">
         {/* Logo */}
-        {knownContract?.logoUrl ? (
+        {contract?.logoUrl ? (
           <img
-            src={knownContract.logoUrl}
-            alt={knownContract.name}
+            src={contract.logoUrl}
+            alt={contract.name}
             className="size-8 rounded-full shrink-0"
           />
         ) : (
@@ -169,15 +169,15 @@ function ContractCard({
         {/* Contract info */}
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
-            <p className="font-medium">{knownContract?.name ?? name}</p>
-            {knownContract?.verified && (
+            <p className="font-medium">{contract?.name ?? name}</p>
+            {contract?.verified && (
               <span title="Verified contract">
                 <BadgeCheck className="size-4 text-blue-500 shrink-0" />
               </span>
             )}
-            {knownContract?.protocol && (
+            {contract?.protocol && (
               <Badge variant="outline" className="text-xs py-0 h-4">
-                {knownContract.protocol}
+                {contract.protocol}
               </Badge>
             )}
           </div>
@@ -226,6 +226,44 @@ function EIP712ScopeDetails({ scope, chainId }: { scope: EIP712Scope; chainId?: 
 }
 
 /**
+ * Target contract display for Execute scopes
+ */
+function ExecuteTargetCard({
+  target,
+  chainId,
+}: {
+  target: ExecuteScope['targets'][number]
+  chainId?: number
+}) {
+  const { contract, displayName } = useKnownContractMetadata(target.address, chainId)
+
+  return (
+    <div className="p-2 rounded bg-muted/50 text-sm">
+      <div className="flex items-center gap-2">
+        <p className="font-medium">{contract?.name ?? target.name ?? 'Contract'}</p>
+        {contract?.verified && (
+          <span title="Verified contract">
+            <BadgeCheck className="size-4 text-blue-500 shrink-0" />
+          </span>
+        )}
+        <p className="text-xs text-muted-foreground font-mono">
+          {target.address.slice(0, 6)}...{target.address.slice(-4)}
+        </p>
+      </div>
+      {target.selectors && target.selectors.length > 0 && (
+        <div className="flex gap-1 mt-1 flex-wrap">
+          {target.selectors.map((sel) => (
+            <Badge key={sel.selector} variant="outline" className="text-xs">
+              {sel.name}
+            </Badge>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
  * Details section for Execute scopes
  */
 function ExecuteScopeDetails({ scope, chainId }: { scope: ExecuteScope; chainId?: number }) {
@@ -238,36 +276,13 @@ function ExecuteScopeDetails({ scope, chainId }: { scope: ExecuteScope; chainId?
             Allowed Contracts
           </p>
           <div className="space-y-2">
-            {scope.targets.map((target) => {
-              const knownContract = chainId ? getKnownContract(target.address, chainId) : null
-              return (
-                <div
-                  key={target.address}
-                  className="p-2 rounded bg-muted/50 text-sm"
-                >
-                  <div className="flex items-center gap-2">
-                    <p className="font-medium">{knownContract?.name ?? target.name ?? 'Contract'}</p>
-                    {knownContract?.verified && (
-                      <span title="Verified contract">
-                        <BadgeCheck className="size-4 text-blue-500 shrink-0" />
-                      </span>
-                    )}
-                    <p className="text-xs text-muted-foreground font-mono">
-                      {target.address.slice(0, 6)}...{target.address.slice(-4)}
-                    </p>
-                  </div>
-                  {target.selectors && target.selectors.length > 0 && (
-                    <div className="flex gap-1 mt-1 flex-wrap">
-                      {target.selectors.map((sel) => (
-                        <Badge key={sel.selector} variant="outline" className="text-xs">
-                          {sel.name}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )
-            })}
+            {scope.targets.map((target) => (
+              <ExecuteTargetCard
+                key={target.address}
+                target={target}
+                chainId={chainId}
+              />
+            ))}
           </div>
         </div>
       )}

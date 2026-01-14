@@ -395,7 +395,5 @@ export function useMcpServer() {
   }
 }
 
-// Utility function for formatting price
-export function formatPrice(price: number): string {
-  return `$${(price / 1_000_000).toFixed(4)}`
-}
+// Re-export formatPrice from centralized formatting module
+export { formatPrice } from '@/lib/formatting'

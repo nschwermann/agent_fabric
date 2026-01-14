@@ -1,21 +1,14 @@
 'use client'
 
-import { useState } from 'react'
 import type { Address } from 'viem'
 import { useAppKit } from '@reown/appkit/react'
-import { useConnection } from 'wagmi'
-import { cronos, cronosTestnet } from '@reown/appkit/networks'
 import { Wallet, Send, Loader2, Check, AlertCircle, ExternalLink, Key, Shield } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { useUser } from '@/context/user'
-import { defaultChainId } from '@/config/tokens'
-import { usePayment, useSessionPayment } from '../model'
-import { useSmartAccount } from '@/features/smartAccount/model/useSmartAccount'
-import { useSessions } from '@/features/sessionKeys/model'
+import { usePaymentOrchestration } from '../model'
 
 interface PaymentFormProps {
   /** Resolved recipient address */
@@ -37,66 +30,53 @@ export function PaymentForm({
   amountSmallestUnit: initialAmountSmallestUnit,
   originalDomain,
 }: PaymentFormProps) {
-  const { session } = useUser()
   const { open } = useAppKit()
-  const { chainId } = useConnection()
 
-  // Smart account and session state
-  const { isEnabled: isSmartAccountEnabled, enable: enableSmartAccount, status: smartAccountStatus } = useSmartAccount()
-  const { sessions, isLoading: isLoadingSessions } = useSessions()
-  const activeSession = sessions[0] // Use first active session
-
-  // Session mode toggle - default to true if session key is available
-  const canUseSession = isSmartAccountEnabled && !!activeSession
-  const [useSession, setUseSession] = useState(canUseSession)
-
-  // Manual payment hook (wallet signature)
-  const manualPayment = usePayment({
+  // Use orchestration hook for all payment logic
+  const {
+    buttonText,
+    buttonDisabled,
+    handlePayment,
+    payment,
+    useSession,
+    setUseSession,
+    canUseSession,
+    isSmartAccountEnabled,
+    smartAccountStatus,
+    activeSession,
+    isLoadingSessions,
+    explorerUrl,
+    isProcessing,
+    isAuthenticated,
+  } = usePaymentOrchestration({
     recipient,
     initialAmountUsd: amountUsd,
     initialAmountSmallestUnit,
   })
-
-  // Session payment hook (server-side signature)
-  const sessionPayment = useSessionPayment({
-    sessionId: activeSession?.sessionId ?? '',
-    recipient,
-    initialAmountUsd: amountUsd,
-  })
-
-  // Use appropriate payment method based on toggle
-  const payment = useSession && activeSession ? sessionPayment : manualPayment
-
-  const isAuthenticated = session?.isAuthenticated
-  const currentChainId = chainId || defaultChainId
-  const isProcessing = payment.status === 'signing' || payment.status === 'submitting'
-  const chain = currentChainId === cronos.id ? cronos : cronosTestnet
-  const explorerUrl = chain.blockExplorers?.default.url ?? 'https://cronoscan.com'
-  const parsedAmount = parseFloat(payment.amount)
 
   const handlePay = async () => {
     if (!isAuthenticated) {
       open()
       return
     }
-
-    // If session mode is enabled but smart account not enabled, enable it
-    if (useSession && !isSmartAccountEnabled) {
-      await enableSmartAccount()
-      return
-    }
-
-    await payment.pay()
+    await handlePayment()
   }
 
   const getButtonContent = () => {
+    if (smartAccountStatus === 'enabling') {
+      return (
+        <>
+          <Loader2 className="size-4 animate-spin" />
+          {buttonText}
+        </>
+      )
+    }
+
     if (isProcessing) {
       return (
         <>
           <Loader2 className="size-4 animate-spin" />
-          {payment.status === 'signing'
-            ? (useSession ? 'Processing...' : 'Sign in Wallet...')
-            : 'Submitting...'}
+          {buttonText}
         </>
       )
     }
@@ -105,7 +85,7 @@ export function PaymentForm({
       return (
         <>
           <Wallet className="size-4" />
-          Connect Wallet
+          {buttonText}
         </>
       )
     }
@@ -114,7 +94,7 @@ export function PaymentForm({
       return (
         <>
           <Shield className="size-4" />
-          Enable Smart Account
+          {buttonText}
         </>
       )
     }
@@ -123,7 +103,7 @@ export function PaymentForm({
       return (
         <>
           <Key className="size-4" />
-          Create Session First
+          {buttonText}
         </>
       )
     }
@@ -131,8 +111,7 @@ export function PaymentForm({
     return (
       <>
         {useSession ? <Key className="size-4" /> : <Send className="size-4" />}
-        Pay ${payment.isValidAmount ? parsedAmount.toFixed(2) : '0.00'}
-        {useSession && activeSession && ' (Auto)'}
+        {buttonText}
       </>
     )
   }
@@ -257,21 +236,9 @@ export function PaymentForm({
           className="w-full gap-2"
           size="lg"
           onClick={handlePay}
-          disabled={
-            (isAuthenticated && !payment.isValidAmount) ||
-            isProcessing ||
-            smartAccountStatus === 'enabling' ||
-            (useSession && !activeSession && !isLoadingSessions && isSmartAccountEnabled)
-          }
+          disabled={buttonDisabled}
         >
-          {smartAccountStatus === 'enabling' ? (
-            <>
-              <Loader2 className="size-4 animate-spin" />
-              Enabling Smart Account...
-            </>
-          ) : (
-            getButtonContent()
-          )}
+          {getButtonContent()}
         </Button>
       </CardFooter>
     </Card>

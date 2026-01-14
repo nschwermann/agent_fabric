@@ -1,4 +1,15 @@
 export { useAuthorization, type UseAuthorizationReturn } from './useAuthorization'
+export {
+  useAuthorizationFlow,
+  type AuthorizationStep,
+  type AuthorizationFlowParams,
+  type UseAuthorizationFlowReturn,
+} from './useAuthorizationFlow'
+export {
+  useParameterizedScope,
+  type UseParameterizedScopeReturn,
+  type ParameterValues,
+} from './useParameterizedScope'
 export type {
   OAuthClientInfo,
   OAuthScopeInfo,

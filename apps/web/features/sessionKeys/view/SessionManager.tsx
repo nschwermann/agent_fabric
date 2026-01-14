@@ -4,13 +4,10 @@ import { useMemo, useState } from 'react'
 import { Key, Trash2, Clock, Loader2, AlertTriangle, ExternalLink, Wallet } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { useSmartAccount } from '@/features/smartAccount/model/useSmartAccount'
-import { useGrantSession, useSessions, useRevokeSession } from '../model'
+import { useSessionManagement } from '../model'
 import { format } from 'date-fns'
 import { ScopesSummaryBadges } from './ScopeApprovalCard'
-import { getDefaultScope } from '@/lib/sessionKeys/scopeTemplates'
 import { deserializeScope, type SerializedSessionScope } from '@/lib/sessionKeys/types'
-import { useConnection } from 'wagmi'
 import { GenerateWalletModal } from './GenerateWalletModal'
 
 /**
@@ -24,42 +21,33 @@ import { GenerateWalletModal } from './GenerateWalletModal'
  * If smart account is not enabled, shows prompt to enable it first.
  */
 export function SessionManager() {
-  const { chainId } = useConnection()
-  const { isEnabled, status: smartAccountStatus, delegatedTo } = useSmartAccount()
-  const { sessions, isLoading: isLoadingSessions, refresh } = useSessions()
-  const { grantSession, status: grantStatus, isLoading: isGranting } = useGrantSession()
-  const { revokeSession, isLoading: isRevoking } = useRevokeSession()
+  const {
+    sessions,
+    isLoading: isLoadingSessions,
+    isGranting,
+    isRevoking,
+    grantStatus,
+    smartAccountStatus,
+    delegatedTo,
+    grantSession,
+    revokeSession,
+  } = useSessionManagement()
   const [showGenerateModal, setShowGenerateModal] = useState(false)
 
   // Check if there's already an active x402 session
   const hasActiveSession = useMemo(() => sessions.length > 0, [sessions])
 
   const handleEnableX402 = async () => {
-    if (!chainId) return
-
-    try {
-      // Create session with default x402 payments scope (30 days)
-      await grantSession({
-        validityDays: 30,
-        scopes: [getDefaultScope(chainId)],
-      })
-      refresh()
-    } catch (error) {
-      // Error is handled in the hook
-    }
+    // Use default scopes (handled by the hook)
+    await grantSession()
   }
 
   const handleRevokeSession = async (sessionId: string) => {
-    try {
-      await revokeSession(sessionId)
-      refresh()
-    } catch (error) {
-      // Error is handled in the hook
-    }
+    await revokeSession(sessionId)
   }
 
   // Incompatible delegation - show warning and generate wallet option
-  if (smartAccountStatus === 'incompatible_delegation') {
+  if (smartAccountStatus === 'incompatible') {
     return (
       <>
         <Card>
@@ -114,7 +102,7 @@ export function SessionManager() {
   }
 
   // Smart account not enabled - show wallet generation prompt
-  if (!isEnabled) {
+  if (smartAccountStatus === 'not_enabled') {
     return (
       <>
         <Card>

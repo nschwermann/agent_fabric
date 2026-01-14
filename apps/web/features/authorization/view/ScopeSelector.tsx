@@ -4,7 +4,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { ScopeApprovalCard } from '@/features/sessionKeys/view/ScopeApprovalCard'
-import { getScopeTemplateById, createScopeWithParams } from '@/lib/sessionKeys/scopeTemplates'
+import { useParameterizedScope } from '../model/useParameterizedScope'
 import { TokenSelector } from './TokenSelector'
 import { Shield, FileSignature, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react'
 import { useState } from 'react'
@@ -39,46 +39,74 @@ export function ScopeSelector({
   return (
     <div className="space-y-3">
       <Label>Requested Permissions</Label>
-      {scopes.map((scopeInfo) => {
-        const template = getScopeTemplateById(scopeInfo.id)
-        if (!template) return null
-
-        // For parameterized scopes, use a special card with token selector
-        if (template.requiresParams && template.paramType === 'tokens') {
-          const params = scopeParams[scopeInfo.id]
-          const tokens = params?.tokens ?? []
-
-          // Create scope with current tokens for display
-          const scope = tokens.length > 0
-            ? createScopeWithParams(scopeInfo.id, { tokens })
-            : template.factory()
-
-          return (
-            <ParameterizedScopeCard
-              key={scopeInfo.id}
-              scopeId={scopeInfo.id}
-              scopeInfo={scopeInfo}
-              isSelected={selectedScopeIds.includes(scopeInfo.id)}
-              onToggle={() => onToggleScope(scopeInfo.id)}
-              selectedTokens={tokens}
-              onTokensChange={(newTokens) => onScopeParamsChange(scopeInfo.id, { tokens: newTokens })}
-              chainId={chainId}
-            />
-          )
-        }
-
-        // Regular scope - use standard card
-        const scope = template.factory()
-        return (
-          <ScopeApprovalCard
-            key={scopeInfo.id}
-            scope={scope}
-            isSelected={selectedScopeIds.includes(scopeInfo.id)}
-            onToggle={() => onToggleScope(scopeInfo.id)}
-          />
-        )
-      })}
+      {scopes.map((scopeInfo) => (
+        <ScopeSelectorItem
+          key={scopeInfo.id}
+          scopeInfo={scopeInfo}
+          isSelected={selectedScopeIds.includes(scopeInfo.id)}
+          onToggle={() => onToggleScope(scopeInfo.id)}
+          scopeParams={scopeParams[scopeInfo.id]}
+          onScopeParamsChange={(params) => onScopeParamsChange(scopeInfo.id, params)}
+          chainId={chainId}
+        />
+      ))}
     </div>
+  )
+}
+
+/**
+ * Individual scope item - uses useParameterizedScope hook
+ */
+function ScopeSelectorItem({
+  scopeInfo,
+  isSelected,
+  onToggle,
+  scopeParams,
+  onScopeParamsChange,
+  chainId,
+}: {
+  scopeInfo: OAuthScopeInfo
+  isSelected: boolean
+  onToggle: () => void
+  scopeParams: { tokens?: TokenSelection[] } | undefined
+  onScopeParamsChange: (params: { tokens?: TokenSelection[] }) => void
+  chainId: number
+}) {
+  const { template, createScope } = useParameterizedScope(
+    scopeInfo.id,
+    chainId,
+    { tokens: scopeParams?.tokens }
+  )
+
+  if (!template) return null
+
+  // For parameterized scopes, use a special card with token selector
+  if (template.requiresParams && template.paramType === 'tokens') {
+    const tokens = scopeParams?.tokens ?? []
+
+    return (
+      <ParameterizedScopeCard
+        scopeId={scopeInfo.id}
+        scopeInfo={scopeInfo}
+        isSelected={isSelected}
+        onToggle={onToggle}
+        selectedTokens={tokens}
+        onTokensChange={(newTokens) => onScopeParamsChange({ tokens: newTokens })}
+        chainId={chainId}
+      />
+    )
+  }
+
+  // Regular scope - use standard card
+  const scope = createScope()
+  if (!scope) return null
+
+  return (
+    <ScopeApprovalCard
+      scope={scope}
+      isSelected={isSelected}
+      onToggle={onToggle}
+    />
   )
 }
 

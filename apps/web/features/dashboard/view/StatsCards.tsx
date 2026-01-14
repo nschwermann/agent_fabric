@@ -2,24 +2,11 @@
 
 import { Layers, Activity, CheckCircle, DollarSign } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { formatEarnings, formatSuccessRate } from '@/lib/formatting'
 import type { DashboardTotals } from '../model/types'
 
 interface StatsCardsProps {
   totals: DashboardTotals
-}
-
-function formatEarnings(amountInSmallestUnit: number): string {
-  const amount = amountInSmallestUnit / 1_000_000
-  if (amount === 0) return '$0.00'
-  if (amount < 0.01) return `$${amount.toFixed(6)}`
-  if (amount < 1) return `$${amount.toFixed(4)}`
-  return `$${amount.toFixed(2)}`
-}
-
-function formatSuccessRate(successful: number, total: number): string {
-  if (total === 0) return '0%'
-  const rate = (successful / total) * 100
-  return `${rate.toFixed(1)}%`
 }
 
 export function StatsCards({ totals }: StatsCardsProps) {
