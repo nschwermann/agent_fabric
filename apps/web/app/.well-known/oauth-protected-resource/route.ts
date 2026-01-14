@@ -20,7 +20,7 @@ export async function GET(request: NextRequest) {
     authorization_servers: [resourceUrl],
 
     // Scopes required for accessing this resource
-    scopes_supported: ['x402:payments', 'mcp:tools'],
+    scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
 
     // Bearer token authentication
     bearer_methods_supported: ['header'],

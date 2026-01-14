@@ -7,5 +7,8 @@ export type {
   AuthorizationFormState,
   ApprovalStatus,
   ValidityDays,
+  TokenSelection,
+  ScopeParamsMap,
+  WorkflowTarget,
 } from './types'
 export { VALIDITY_OPTIONS } from './types'

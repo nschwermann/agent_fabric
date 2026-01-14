@@ -76,6 +76,7 @@ async function handleProxyRequest(
     // Extract variables from all sources (X-Variables header, query params, body)
     const url = new URL(request.url)
     const extractedVariables = extractVariables(request.headers, url.searchParams, requestBodyText ?? undefined)
+    console.log('[Proxy] Extracted variables:', JSON.stringify(extractedVariables, null, 2))
 
     // Validate variables against schema BEFORE checking payment (no charge for invalid requests!)
     if (variablesSchema && variablesSchema.length > 0) {
@@ -288,10 +289,15 @@ async function proxyToTarget(
   targetHeaders.set('content-type', proxy.contentType ?? 'application/json')
 
   // Decrypt and add stored headers
+  console.log('[Proxy] encryptedHeaders present:', !!proxy.encryptedHeaders)
+  console.log('[Proxy] encryptedHeaders value:', JSON.stringify(proxy.encryptedHeaders, null, 2))
   if (proxy.encryptedHeaders) {
     try {
       const decryptedHeaders = decryptHybrid(proxy.encryptedHeaders as HybridEncryptedData)
+      console.log('[Proxy] Decrypted headers keys:', Object.keys(decryptedHeaders))
+      console.log('[Proxy] Decrypted headers:', JSON.stringify(decryptedHeaders, null, 2))
       for (const [key, value] of Object.entries(decryptedHeaders)) {
+        console.log(`[Proxy] Setting header: ${key} = ${value}`)
         targetHeaders.set(key, value)
       }
     } catch (error) {
@@ -326,6 +332,17 @@ async function proxyToTarget(
   // Create abort controller for timeout
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), PROXY_TIMEOUT_MS)
+
+  // Debug: Log the complete request being made
+  console.log('[Proxy] === OUTGOING REQUEST ===')
+  console.log('[Proxy] URL:', targetUrl)
+  console.log('[Proxy] Method:', method)
+  console.log('[Proxy] Headers:')
+  targetHeaders.forEach((value, key) => {
+    console.log(`[Proxy]   ${key}: ${value}`)
+  })
+  console.log('[Proxy] Body:', body)
+  console.log('[Proxy] === END REQUEST ===')
 
   try {
     const targetResponse = await fetch(targetUrl, {

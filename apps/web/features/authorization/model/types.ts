@@ -5,6 +5,18 @@
  * third-party applications to access their wallet via session keys.
  */
 
+import type { Address } from 'viem'
+
+/**
+ * Workflow target contract from scope configuration
+ */
+export interface WorkflowTarget {
+  address: string
+  name?: string
+  description?: string
+  workflowName: string
+}
+
 /**
  * OAuth client information returned from the authorize endpoint
  */
@@ -18,6 +30,8 @@ export interface OAuthClientInfo {
   scopes: OAuthScopeInfo[]
   redirectUri: string
   state: string | null
+  mcpSlug?: string
+  workflowTargets?: WorkflowTarget[]
 }
 
 /**
@@ -42,6 +56,7 @@ export interface OAuthParams {
   codeChallengeMethod: string | null
   scopeParam: string | null
   state: string | null
+  mcpSlug: string | null
 }
 
 /**
@@ -53,11 +68,31 @@ export interface OAuthParamsValidation {
 }
 
 /**
+ * Token selection for parameterized scopes (like workflow:token-approvals)
+ */
+export interface TokenSelection {
+  address: Address
+  name: string
+  symbol?: string
+}
+
+/**
+ * Parameters for scopes that require configuration
+ */
+export interface ScopeParamsMap {
+  [scopeId: string]: {
+    tokens?: TokenSelection[]
+  }
+}
+
+/**
  * Authorization form state
  */
 export interface AuthorizationFormState {
   selectedScopeIds: string[]
   validityDays: string
+  /** Parameters for scopes that require additional configuration (e.g., token selection) */
+  scopeParams: ScopeParamsMap
 }
 
 /**

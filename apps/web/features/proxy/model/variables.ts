@@ -66,17 +66,27 @@ export function extractVariables(
     }
   }
 
-  // Priority 3: Request body X-Variables field (for convenience)
+  // Priority 3: Request body fields
   if (body) {
     try {
       const parsed = JSON.parse(body)
-      if (typeof parsed === 'object' && parsed !== null && 'X-Variables' in parsed) {
-        const bodyVars = parsed['X-Variables']
-        if (typeof bodyVars === 'object' && bodyVars !== null) {
-          for (const [key, value] of Object.entries(bodyVars)) {
-            if (!(key in variables)) {
-              variables[key] = value
+      if (typeof parsed === 'object' && parsed !== null) {
+        // First check for X-Variables wrapper (for explicit variable passing)
+        if ('X-Variables' in parsed) {
+          const bodyVars = parsed['X-Variables']
+          if (typeof bodyVars === 'object' && bodyVars !== null) {
+            for (const [key, value] of Object.entries(bodyVars)) {
+              if (!(key in variables)) {
+                variables[key] = value
+              }
             }
+          }
+        }
+        // Also extract top-level body fields as variables (for direct body usage)
+        // This allows users to send the body with actual values that get substituted into the template
+        for (const [key, value] of Object.entries(parsed)) {
+          if (key !== 'X-Variables' && !(key in variables)) {
+            variables[key] = value
           }
         }
       }

@@ -66,6 +66,8 @@ export function ApiTryIt({
   const {
     variables,
     setVariable,
+    requestBody,
+    setRequestBody,
     isLoading,
     response,
     error,
@@ -74,9 +76,13 @@ export function ApiTryIt({
     proxyUrl,
     httpMethod,
     variablesSchema,
+    requestBodyTemplate,
     sessionId: activeSession?.sessionId,
     useSessionKey: useSession && !!activeSession,
   })
+
+  // Determine if body input should be shown (POST, PUT, PATCH)
+  const showBodyInput = ['POST', 'PUT', 'PATCH'].includes(httpMethod.toUpperCase())
 
   const isAuthenticated = session?.isAuthenticated
 
@@ -190,6 +196,27 @@ export function ApiTryIt({
                 </div>
               ))}
             </div>
+          </div>
+        )}
+
+        {/* Request Body input for POST/PUT/PATCH */}
+        {showBodyInput && (
+          <div className="space-y-2">
+            <Label htmlFor="requestBody" className="text-base font-semibold">
+              Request Body
+            </Label>
+            <p className="text-xs text-muted-foreground">
+              {requestBodyTemplate
+                ? 'Edit the request body below. Variables in {{brackets}} will be substituted.'
+                : 'Enter the JSON request body to send with this request.'}
+            </p>
+            <Textarea
+              id="requestBody"
+              value={requestBody}
+              onChange={(e) => setRequestBody(e.target.value)}
+              placeholder='{"key": "value"}'
+              className="font-mono text-sm min-h-[120px]"
+            />
           </div>
         )}
 

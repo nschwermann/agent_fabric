@@ -73,9 +73,10 @@ export default defineConfig({
   verify: {
     etherscan: {
       apiKey: configVariable(
-        process.env.HARDHAT_NETWORK === "cronosMainnet"
-          ? "CRONOS_EXPLORER"
-          : "CRONOS_EXPLORER_TEST",
+        // process.env.HARDHAT_NETWORK === "cronosMainnet"
+          // ? "CRONOS_EXPLORER"
+          // : "CRONOS_EXPLORER_TEST",
+          "CRONOS_EXPLORER"
       ),
     },
   },

@@ -146,6 +146,7 @@ async function verifyWithOfficialFacilitator(
   }
 
   console.log('[Facilitator] Forwarding to official facilitator:', facilitatorUrl)
+  console.log('[Facilitator] Verify request:', JSON.stringify(verifyRequest, null, 2))
 
   try {
     const response = await fetch(`${facilitatorUrl}/verify`, {
@@ -193,6 +194,27 @@ export async function verifyPayment(
   try {
     // Parse the payment header
     const header = parsePaymentHeader(paymentHeaderBase64)
+
+    console.log('[Facilitator] Decoded payment header:', {
+      x402Version: header.x402Version,
+      scheme: header.scheme,
+      network: header.network,
+      from: header.payload.from,
+      to: header.payload.to,
+      value: header.payload.value,
+      asset: header.payload.asset,
+    })
+
+    // Log full transferWithAuthorization params for debugging
+    console.log('[Facilitator] transferWithAuthorization params:', {
+      from: header.payload.from,
+      to: header.payload.to,
+      value: header.payload.value,
+      validAfter: header.payload.validAfter,
+      validBefore: header.payload.validBefore,
+      nonce: header.payload.nonce,
+      signature: header.payload.signature,
+    })
 
     // Check x402 version
     if (header.x402Version !== 1) {

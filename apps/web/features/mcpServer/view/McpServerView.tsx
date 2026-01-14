@@ -6,6 +6,7 @@ import { useMcpServer } from '../model/useMcpServer'
 import { ServerConfigCard } from './ServerConfigCard'
 import { ConnectionInfoCard } from './ConnectionInfoCard'
 import { ToolsManagementCard } from './ToolsManagementCard'
+import { WorkflowsManagementCard } from './WorkflowsManagementCard'
 
 export function McpServerView() {
   const {
@@ -14,6 +15,8 @@ export function McpServerView() {
     filteredProxies,
     availableProxies,
     categories,
+    serverWorkflows,
+    availableWorkflows,
     isLoading,
     isSaving,
     formData,
@@ -27,6 +30,8 @@ export function McpServerView() {
     saveServer,
     addTool,
     removeTool,
+    addWorkflow,
+    removeWorkflow,
     copyConnectionUrl,
   } = useMcpServer()
 
@@ -77,6 +82,24 @@ export function McpServerView() {
       showSuccess('Tool removed')
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Failed to remove tool')
+    }
+  }
+
+  const handleAddWorkflow = async (workflowId: string) => {
+    try {
+      await addWorkflow(workflowId)
+      showSuccess('Workflow added')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to add workflow')
+    }
+  }
+
+  const handleRemoveWorkflow = async (id: string) => {
+    try {
+      await removeWorkflow(id)
+      showSuccess('Workflow removed')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Failed to remove workflow')
     }
   }
 
@@ -151,6 +174,16 @@ export function McpServerView() {
           onCategoryChange={setSelectedCategory}
           onAddTool={handleAddTool}
           onRemoveTool={handleRemoveTool}
+        />
+      )}
+
+      {/* Workflows Management */}
+      {server && (
+        <WorkflowsManagementCard
+          workflows={serverWorkflows}
+          availableWorkflows={availableWorkflows}
+          onAddWorkflow={handleAddWorkflow}
+          onRemoveWorkflow={handleRemoveWorkflow}
         />
       )}
     </div>

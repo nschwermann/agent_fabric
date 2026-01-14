@@ -1,5 +1,6 @@
 'use client'
 
+import { useConnection } from 'wagmi'
 import { Card, CardContent } from '@/components/ui/card'
 import { useAuthorization } from '../model/useAuthorization'
 import { AuthorizationLoading } from './AuthorizationLoading'
@@ -11,6 +12,8 @@ import { ValiditySelector } from './ValiditySelector'
 import { NonEnforceableWarning } from './NonEnforceableWarning'
 import { AuthorizationActions } from './AuthorizationActions'
 import { RedirectInfo } from './RedirectInfo'
+import { WorkflowTargetsDisplay } from './WorkflowTargetsDisplay'
+import { cronosTestnet } from '@reown/appkit/networks'
 
 /**
  * Main view component for the OAuth authorization flow
@@ -22,6 +25,7 @@ import { RedirectInfo } from './RedirectInfo'
  * - Main authorization form
  */
 export function AuthorizationView() {
+  const { chainId } = useConnection()
   const {
     clientInfo,
     isLoading,
@@ -32,6 +36,11 @@ export function AuthorizationView() {
     selectedScopeIds,
     hasNonEnforceableScope,
     toggleScope,
+    scopeParams,
+    updateScopeParams,
+    hasWorkflowTargets,
+    isWorkflowTargetsSelected,
+    workflowTargetsScopeId,
     validityDays,
     setValidityDays,
     handleApprove,
@@ -41,6 +50,9 @@ export function AuthorizationView() {
     approveError,
     grantStatus,
   } = useAuthorization()
+
+  // Use connected chain or default to Cronos Testnet
+  const effectiveChainId = chainId ?? cronosTestnet.id
 
   // Loading state
   if (isLoading) {
@@ -84,7 +96,19 @@ export function AuthorizationView() {
             scopes={clientInfo.scopes}
             selectedScopeIds={selectedScopeIds}
             onToggleScope={toggleScope}
+            scopeParams={scopeParams}
+            onScopeParamsChange={updateScopeParams}
+            chainId={effectiveChainId}
           />
+
+          {/* Workflow target contracts */}
+          {hasWorkflowTargets && clientInfo.workflowTargets && (
+            <WorkflowTargetsDisplay
+              targets={clientInfo.workflowTargets}
+              isSelected={isWorkflowTargetsSelected}
+              onToggle={() => toggleScope(workflowTargetsScopeId)}
+            />
+          )}
 
           {/* Validity period */}
           <ValiditySelector

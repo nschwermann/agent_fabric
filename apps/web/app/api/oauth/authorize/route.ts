@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { db, oauthAuthCodes, sessionKeys } from '@/lib/db'
+import { db, oauthAuthCodes, sessionKeys, mcpServers, mcpServerWorkflows, workflowTemplates } from '@/lib/db'
 import { eq, and } from 'drizzle-orm'
 import { withAuth } from '@/lib/auth'
 import {
@@ -10,6 +10,7 @@ import {
 } from '@/lib/auth/oauth'
 import { getScopeTemplateById } from '@/lib/sessionKeys/scopeTemplates'
 import { serializeScope, type SessionScope } from '@/lib/sessionKeys/types'
+import type { WorkflowDefinition } from '@/lib/db/schema'
 
 /**
  * GET /api/oauth/authorize
@@ -64,6 +65,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: 'invalid_client' }, { status: 400 })
   }
 
+  // Use mcp_slug from URL or fall back to client's stored slug
+  const effectiveSlug = mcpSlug || client.mcpSlug
+
   // Validate redirect URI
   if (!validateRedirectUri(client, redirectUri)) {
     return NextResponse.json({ error: 'invalid_redirect_uri' }, { status: 400 })
@@ -102,6 +106,47 @@ export async function GET(request: NextRequest) {
     }
   })
 
+  // If mcp_slug is available, fetch workflows and their scope requirements
+  let workflowTargets: { address: string; name?: string; description?: string; workflowName: string }[] = []
+
+  if (effectiveSlug) {
+    // Get MCP server by slug
+    const mcpServer = await db.query.mcpServers.findFirst({
+      where: eq(mcpServers.slug, effectiveSlug),
+    })
+
+    if (mcpServer) {
+      // Get all workflows attached to this server
+      const serverWorkflows = await db.query.mcpServerWorkflows.findMany({
+        where: and(
+          eq(mcpServerWorkflows.mcpServerId, mcpServer.id),
+          eq(mcpServerWorkflows.isEnabled, true)
+        ),
+      })
+
+      // Extract scope config from each workflow
+      for (const sw of serverWorkflows) {
+        const workflow = await db.query.workflowTemplates.findFirst({
+          where: eq(workflowTemplates.id, sw.workflowId),
+        })
+
+        if (workflow) {
+          const definition = workflow.workflowDefinition as WorkflowDefinition
+          const dynamicTargets = definition.scopeConfig?.allowedDynamicTargets ?? []
+
+          for (const target of dynamicTargets) {
+            workflowTargets.push({
+              address: target.address,
+              name: target.name,
+              description: target.description,
+              workflowName: workflow.name,
+            })
+          }
+        }
+      }
+    }
+  }
+
   // Return client info for consent page
   return NextResponse.json({
     client: {
@@ -113,7 +158,8 @@ export async function GET(request: NextRequest) {
     scopes: scopeDetails,
     redirectUri,
     state,
-    mcpSlug, // Include slug if provided
+    mcpSlug: effectiveSlug, // Include slug (from URL or client record)
+    workflowTargets, // Include workflow dynamic targets
   })
 }
 

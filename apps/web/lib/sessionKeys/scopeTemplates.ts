@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem'
-import { cronosTestnet } from '@reown/appkit/networks'
+import { cronos } from '@reown/appkit/networks'
 import { getUsdceConfig } from '@/config/tokens'
 import { getKnownContract } from '@/lib/contracts'
 import type { EIP712Scope, ExecuteScope, SessionScope } from './types'
@@ -19,8 +19,9 @@ export const SELECTORS = {
   permit: '0xd505accf' as Hex,
 } as const
 
-// Default chain ID for the app (Cronos Testnet)
-const DEFAULT_CHAIN_ID = cronosTestnet.id
+// Default chain ID for the app (Cronos Mainnet)
+// Note: Callers should always pass chainId explicitly for correct behavior
+const DEFAULT_CHAIN_ID = cronos.id
 
 /**
  * Scope template factory functions
@@ -115,6 +116,26 @@ export const SCOPE_TEMPLATES = {
   }),
 
   /**
+   * Workflow Token Approvals via executeWithSession
+   * User-selected tokens for DeFi workflows (approve only)
+   * This scope is configured during OAuth consent - users pick which tokens to allow
+   */
+  'workflow:token-approvals': (tokens: { address: Address; name: string }[]): ExecuteScope => ({
+    id: 'workflow:token-approvals',
+    type: 'execute',
+    name: 'Token Approvals for Workflows',
+    description: 'Allow workflows to approve specified tokens for DeFi operations. Users select which tokens to authorize during consent.',
+    budgetEnforceable: true,
+    targets: tokens.map(token => ({
+      address: token.address,
+      name: token.name,
+      selectors: [
+        { selector: SELECTORS.approve, name: 'approve', description: 'Set token allowance for a spender' },
+      ],
+    })),
+  }),
+
+  /**
    * Native Token (CRO/ETH) Transfers via executeWithSession
    * Target contracts are enforced on-chain for native token
    */
@@ -138,16 +159,25 @@ export function getDefaultScope(chainId: number): EIP712Scope {
 }
 
 /**
- * Get all available scope templates for UI display
+ * Scope template metadata for UI display
  */
-export function getAvailableScopeTemplates(chainId: number): {
+export interface ScopeTemplateInfo {
   id: string
   name: string
   description: string
   type: 'execute' | 'eip712'
   budgetEnforceable: boolean
+  /** Whether this scope requires additional parameters (e.g., token selection) */
+  requiresParams: boolean
+  /** Type of parameters required */
+  paramType?: 'tokens'
   factory: () => SessionScope
-}[] {
+}
+
+/**
+ * Get all available scope templates for UI display
+ */
+export function getAvailableScopeTemplates(chainId: number): ScopeTemplateInfo[] {
   const usdce = getUsdceConfig(chainId)
 
   return [
@@ -157,6 +187,7 @@ export function getAvailableScopeTemplates(chainId: number): {
       description: 'Sign USDC transfer authorizations for x402 API payments',
       type: 'eip712',
       budgetEnforceable: false,
+      requiresParams: false,
       factory: () => SCOPE_TEMPLATES['x402:payments'](chainId),
     },
     {
@@ -165,10 +196,22 @@ export function getAvailableScopeTemplates(chainId: number): {
       description: 'Execute direct USDC transfers with on-chain target enforcement',
       type: 'execute',
       budgetEnforceable: true,
+      requiresParams: false,
       factory: () => SCOPE_TEMPLATES['execute:token-transfers'](chainId, [{
         token: usdce.address,
         symbol: usdce.symbol,
       }]),
+    },
+    {
+      id: 'workflow:token-approvals',
+      name: 'Token Approvals for Workflows',
+      description: 'Allow workflows to approve selected tokens for DeFi operations. Select which tokens to authorize.',
+      type: 'execute',
+      budgetEnforceable: true,
+      requiresParams: true,
+      paramType: 'tokens',
+      // Default factory returns empty scope - actual tokens are provided via params
+      factory: () => SCOPE_TEMPLATES['workflow:token-approvals']([]),
     },
   ]
 }
@@ -181,29 +224,75 @@ export function isKnownScopeId(scopeId: string): boolean {
 }
 
 /**
+ * Parameters for parameterized scopes
+ */
+export interface ScopeParams {
+  tokens?: { address: Address; name: string }[]
+}
+
+/**
  * Get a scope template by ID
  * Used for OAuth authorization flows where we need to instantiate scopes from IDs
  */
-export function getScopeTemplateById(scopeId: string, chainId: number = DEFAULT_CHAIN_ID): {
-  id: string
-  factory: () => SessionScope
-} | null {
+export function getScopeTemplateById(scopeId: string, chainId: number = DEFAULT_CHAIN_ID): ScopeTemplateInfo | null {
   const templates = getAvailableScopeTemplates(chainId)
   const template = templates.find(t => t.id === scopeId)
   if (template) {
-    return {
-      id: template.id,
-      factory: template.factory,
-    }
+    return template
   }
 
   // Handle known template IDs that might not be in the available list
   if (scopeId === 'x402:payments') {
     return {
       id: scopeId,
+      name: 'x402 Payments',
+      description: 'Sign USDC transfer authorizations for x402 API payments',
+      type: 'eip712',
+      budgetEnforceable: false,
+      requiresParams: false,
       factory: () => SCOPE_TEMPLATES['x402:payments'](chainId),
     }
   }
 
   return null
+}
+
+/**
+ * Create a scope with provided parameters
+ * For parameterized scopes like workflow:token-approvals
+ */
+export function createScopeWithParams(
+  scopeId: string,
+  params: ScopeParams,
+  chainId: number = DEFAULT_CHAIN_ID
+): SessionScope | null {
+  console.log('[createScopeWithParams] scopeId:', scopeId, 'params:', params)
+
+  // Handle parameterized scopes
+  if (scopeId === 'workflow:token-approvals') {
+    if (!params.tokens || params.tokens.length === 0) {
+      console.warn('[createScopeWithParams] workflow:token-approvals selected but no tokens provided, returning null')
+      return null // Can't create without tokens
+    }
+    const scope = SCOPE_TEMPLATES['workflow:token-approvals'](params.tokens)
+    console.log('[createScopeWithParams] Created workflow:token-approvals scope with', params.tokens.length, 'tokens:', params.tokens.map(t => t.address))
+    return scope
+  }
+
+  // For non-parameterized scopes, use the regular factory
+  const template = getScopeTemplateById(scopeId, chainId)
+  if (template) {
+    return template.factory()
+  }
+
+  console.warn('[createScopeWithParams] No template found for scopeId:', scopeId)
+  return null
+}
+
+/**
+ * Check if a scope requires parameters
+ */
+export function scopeRequiresParams(scopeId: string, chainId: number = DEFAULT_CHAIN_ID): boolean {
+  const template = getScopeTemplateById(scopeId, chainId)
+  return template?.requiresParams ?? false
 }

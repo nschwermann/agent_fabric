@@ -7,6 +7,9 @@ import { NextRequest, NextResponse } from 'next/server'
  * https://datatracker.ietf.org/doc/html/rfc8414
  *
  * MCP clients use this endpoint to discover OAuth configuration.
+ *
+ * If the request comes from an MCP server with a slug (detected via Referer/Origin headers),
+ * the authorization_endpoint and registration_endpoint will include the mcp_slug parameter.
  */
 export async function GET(request: NextRequest) {
   // Get the actual URL from forwarded headers (for tunnels/proxies)
@@ -16,14 +19,30 @@ export async function GET(request: NextRequest) {
     ? `${forwardedProto}://${forwardedHost}`
     : (process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin)
 
+  // Try to extract MCP slug from Referer or Origin header
+  // When MCP SDK fetches this metadata, it may include the MCP server URL as Referer
+  let mcpSlug: string | null = null
+  const referer = request.headers.get('referer') || request.headers.get('origin')
+  if (referer) {
+    // Try to match /mcp/:slug pattern
+    const match = referer.match(/\/mcp\/([^\/\?]+)/)
+    if (match) {
+      mcpSlug = match[1]
+      console.log('[.well-known/oauth-authorization-server] Extracted mcp_slug from referer:', mcpSlug)
+    }
+  }
+
+  // Build endpoints with optional mcp_slug
+  const slugParam = mcpSlug ? `?mcp_slug=${encodeURIComponent(mcpSlug)}` : ''
+
   const metadata = {
     // Required
     issuer,
-    authorization_endpoint: `${issuer}/authorize`,
+    authorization_endpoint: `${issuer}/authorize${slugParam}`,
     token_endpoint: `${issuer}/api/oauth/token`,
 
     // Dynamic client registration (RFC 7591)
-    registration_endpoint: `${issuer}/api/oauth/register`,
+    registration_endpoint: `${issuer}/api/oauth/register${slugParam}`,
 
     // Supported features
     response_types_supported: ['code'],
@@ -31,7 +50,7 @@ export async function GET(request: NextRequest) {
     code_challenge_methods_supported: ['S256'],
 
     // Scopes
-    scopes_supported: ['x402:payments', 'mcp:tools'],
+    scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
 
     // Token configuration
     token_endpoint_auth_methods_supported: ['client_secret_post', 'none'],

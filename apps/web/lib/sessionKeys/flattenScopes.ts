@@ -7,6 +7,12 @@ import { isExecuteScope, isEIP712Scope } from './types'
  * Flatten an array of scopes into on-chain parameters
  * This is the format needed for the grantSession contract call
  *
+ * IMPORTANT: Selector handling
+ * - If ANY target has no selector restrictions (empty/undefined selectors),
+ *   we return an empty allowedSelectors array to allow ALL selectors.
+ * - This is because the contract validates selectors globally, not per-target.
+ * - An empty allowedSelectors array in the contract means "allow all selectors".
+ *
  * @param scopes Array of session scopes (execute and/or eip712)
  * @returns Flattened parameters for on-chain storage
  */
@@ -15,12 +21,20 @@ export function flattenScopesToOnChainParams(scopes: SessionScope[]): OnChainPar
   const allowedSelectors = new Set<Hex>()
   const approvedContractsMap = new Map<Address, { address: Address; name?: string; domainName?: string; domainVersion?: string }>()
 
+  // Track if any target wants "allow all selectors"
+  let hasUnrestrictedTarget = false
+
   for (const scope of scopes) {
     if (isExecuteScope(scope)) {
       // Collect targets and selectors from execute scopes
       for (const target of scope.targets) {
         allowedTargets.add(target.address.toLowerCase() as Address)
-        if (target.selectors) {
+
+        // Check if this target has selector restrictions
+        if (!target.selectors || target.selectors.length === 0) {
+          // This target wants to allow ALL selectors
+          hasUnrestrictedTarget = true
+        } else {
           for (const sel of target.selectors) {
             allowedSelectors.add(sel.selector.toLowerCase() as Hex)
           }
@@ -42,7 +56,9 @@ export function flattenScopesToOnChainParams(scopes: SessionScope[]): OnChainPar
 
   return {
     allowedTargets: Array.from(allowedTargets),
-    allowedSelectors: Array.from(allowedSelectors),
+    // If any target has no selector restrictions, return empty array to allow all
+    // This is required because the contract validates selectors globally
+    allowedSelectors: hasUnrestrictedTarget ? [] : Array.from(allowedSelectors),
     approvedContracts: Array.from(approvedContractsMap.values()),
   }
 }

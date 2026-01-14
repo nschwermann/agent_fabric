@@ -25,6 +25,24 @@ import * as bcrypt from 'bcrypt'
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json()
+    const { searchParams } = new URL(request.url)
+
+    // Get mcp_slug from query param (set by virtual auth server metadata)
+    let mcpSlug = searchParams.get('mcp_slug')
+
+    // If no slug in query param, try to extract from Referer header
+    // MCP SDK might include the MCP server URL in the Referer
+    if (!mcpSlug) {
+      const referer = request.headers.get('referer') || request.headers.get('origin')
+      if (referer) {
+        // Try to match /mcp/:slug pattern in the referer URL
+        const match = referer.match(/\/mcp\/([^\/]+)/)
+        if (match) {
+          mcpSlug = match[1]
+          console.log('[POST /api/oauth/register] Extracted mcp_slug from referer:', mcpSlug)
+        }
+      }
+    }
 
     const {
       redirect_uris: redirectUris,
@@ -63,7 +81,7 @@ export async function POST(request: NextRequest) {
     // Parse requested scopes (default to common MCP scopes)
     const requestedScopes = scope
       ? scope.split(' ').filter(Boolean)
-      : ['x402:payments', 'mcp:tools']
+      : ['x402:payments', 'mcp:tools', 'workflow:token-approvals']
 
     // Normalize redirect URIs for comparison (sorted, lowercase)
     const normalizedUris = [...redirectUris].map((u: string) => u.toLowerCase()).sort()
@@ -83,13 +101,15 @@ export async function POST(request: NextRequest) {
     let clientId: string
 
     if (existingClient) {
-      // Update existing client with new secret
+      // Update existing client with new secret and scopes
       clientId = existingClient.id
       await db.update(oauthClients)
         .set({
           secretHash,
           name: clientName || existingClient.name,
           logoUrl: logoUri || existingClient.logoUrl,
+          allowedScopes: requestedScopes, // Refresh allowed scopes
+          mcpSlug: mcpSlug || existingClient.mcpSlug, // Update slug if provided
         })
         .where(eq(oauthClients.id, clientId))
 
@@ -97,6 +117,8 @@ export async function POST(request: NextRequest) {
         clientId,
         name: clientName || existingClient.name,
         redirectUris,
+        scopes: requestedScopes,
+        mcpSlug: mcpSlug || existingClient.mcpSlug,
       })
     } else {
       // Create new client
@@ -109,6 +131,7 @@ export async function POST(request: NextRequest) {
         logoUrl: logoUri || null,
         redirectUris,
         allowedScopes: requestedScopes,
+        mcpSlug: mcpSlug || null,
         isActive: true,
       })
 
@@ -117,6 +140,7 @@ export async function POST(request: NextRequest) {
         name: clientName || 'MCP Client',
         redirectUris,
         scopes: requestedScopes,
+        mcpSlug,
       })
     }
 

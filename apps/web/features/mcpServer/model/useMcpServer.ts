@@ -3,15 +3,25 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useMemo, useCallback } from 'react'
 import type { McpServer, McpServerTool, AvailableProxy, McpServerFormData } from './types'
+import type { McpServerWorkflow, AvailableWorkflow } from '../view/WorkflowsManagementCard'
 
 interface McpServerResponse {
   server: McpServer | null
   tools: McpServerTool[]
+  workflows?: McpServerWorkflow[]
 }
 
 interface ProxiesResponse {
   proxies: AvailableProxy[]
   categories: string[]
+}
+
+interface WorkflowsResponse {
+  workflows: McpServerWorkflow[]
+}
+
+interface AvailableWorkflowsResponse {
+  workflows: AvailableWorkflow[]
 }
 
 async function fetchMcpServer(): Promise<McpServerResponse> {
@@ -84,6 +94,49 @@ async function removeTool(toolId: string): Promise<void> {
   }
 }
 
+async function fetchMcpServerWorkflows(): Promise<WorkflowsResponse> {
+  const response = await fetch('/api/mcp-server/workflows')
+  if (!response.ok) {
+    throw new Error('Failed to fetch MCP server workflows')
+  }
+  return response.json()
+}
+
+async function fetchAvailableWorkflows(): Promise<AvailableWorkflowsResponse> {
+  const response = await fetch('/api/workflows')
+  if (!response.ok) {
+    throw new Error('Failed to fetch available workflows')
+  }
+  return response.json()
+}
+
+async function addWorkflowToServer(workflowId: string): Promise<McpServerWorkflow> {
+  const response = await fetch('/api/mcp-server/workflows', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ workflowId }),
+  })
+
+  if (!response.ok) {
+    const errorData = await response.json()
+    throw new Error(errorData.error || 'Failed to add workflow')
+  }
+
+  // API returns { workflow: {...} }, extract the workflow object
+  const data = await response.json()
+  return data.workflow
+}
+
+async function removeWorkflowFromServer(id: string): Promise<void> {
+  const response = await fetch(`/api/mcp-server/workflows/${id}`, {
+    method: 'DELETE',
+  })
+
+  if (!response.ok) {
+    throw new Error('Failed to remove workflow')
+  }
+}
+
 export function useMcpServer() {
   const queryClient = useQueryClient()
 
@@ -122,6 +175,21 @@ export function useMcpServer() {
     staleTime: 60_000,
   })
 
+  // Fetch workflows on server
+  const serverWorkflowsQuery = useQuery({
+    queryKey: ['mcp-server-workflows'],
+    queryFn: fetchMcpServerWorkflows,
+    staleTime: 60_000,
+    enabled: !!serverQuery.data?.server,
+  })
+
+  // Fetch available workflows (user's workflows)
+  const availableWorkflowsQuery = useQuery({
+    queryKey: ['workflows'],
+    queryFn: fetchAvailableWorkflows,
+    staleTime: 60_000,
+  })
+
   // Initialize form when server data loads
   const initializeForm = useCallback((server: McpServer) => {
     setFormData({
@@ -137,6 +205,8 @@ export function useMcpServer() {
   const tools = serverQuery.data?.tools || []
   const availableProxies = proxiesQuery.data?.proxies || []
   const categories = proxiesQuery.data?.categories || []
+  const serverWorkflows = serverWorkflowsQuery.data?.workflows || []
+  const availableWorkflows = availableWorkflowsQuery.data?.workflows || []
 
   // Filter proxies
   const filteredProxies = useMemo(() => {
@@ -194,6 +264,24 @@ export function useMcpServer() {
     },
   })
 
+  const addWorkflowMutation = useMutation({
+    mutationFn: addWorkflowToServer,
+    onSuccess: (result) => {
+      queryClient.setQueryData(['mcp-server-workflows'], (old: WorkflowsResponse | undefined) => ({
+        workflows: [...(old?.workflows || []), result],
+      }))
+    },
+  })
+
+  const removeWorkflowMutation = useMutation({
+    mutationFn: removeWorkflowFromServer,
+    onSuccess: (_, workflowId) => {
+      queryClient.setQueryData(['mcp-server-workflows'], (old: WorkflowsResponse | undefined) => ({
+        workflows: (old?.workflows || []).filter((w) => w.id !== workflowId),
+      }))
+    },
+  })
+
   // Actions
   const handleSave = useCallback(async () => {
     if (!formData.slug || !formData.name) {
@@ -224,6 +312,23 @@ export function useMcpServer() {
     [removeToolMutation]
   )
 
+  const handleAddWorkflow = useCallback(
+    async (workflowId: string) => {
+      if (!server) {
+        throw new Error('Server must be created first')
+      }
+      return addWorkflowMutation.mutateAsync(workflowId)
+    },
+    [server, addWorkflowMutation]
+  )
+
+  const handleRemoveWorkflow = useCallback(
+    async (id: string) => {
+      return removeWorkflowMutation.mutateAsync(id)
+    },
+    [removeWorkflowMutation]
+  )
+
   const copyConnectionUrl = useCallback(() => {
     if (!server) return
     const url = `${window.location.origin}/mcp/${server.slug}`
@@ -246,18 +351,24 @@ export function useMcpServer() {
     availableProxies,
     filteredProxies,
     categories,
+    serverWorkflows,
+    availableWorkflows,
 
     // Loading states
     isLoading: serverQuery.isLoading || proxiesQuery.isLoading,
     isSaving: saveMutation.isPending,
     isAddingTool: addToolMutation.isPending,
     isRemovingTool: removeToolMutation.isPending,
+    isAddingWorkflow: addWorkflowMutation.isPending,
+    isRemovingWorkflow: removeWorkflowMutation.isPending,
 
     // Errors
     error: serverQuery.error || proxiesQuery.error,
     saveError: saveMutation.error,
     addToolError: addToolMutation.error,
     removeToolError: removeToolMutation.error,
+    addWorkflowError: addWorkflowMutation.error,
+    removeWorkflowError: removeWorkflowMutation.error,
 
     // Form
     formData,
@@ -278,6 +389,8 @@ export function useMcpServer() {
     saveServer: handleSave,
     addTool: handleAddTool,
     removeTool: handleRemoveTool,
+    addWorkflow: handleAddWorkflow,
+    removeWorkflow: handleRemoveWorkflow,
     copyConnectionUrl,
   }
 }

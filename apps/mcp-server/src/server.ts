@@ -9,6 +9,7 @@ import { z } from 'zod'
 import { validateBearerToken, type AuthContext } from './auth/oauth.js'
 import { toolRegistry, type McpServerConfig } from './tools/registry.js'
 import { createToolsForServer, type ToolContext } from './tools/proxy-tool.js'
+import { createWorkflowToolsForServer } from './tools/workflow-tool.js'
 
 /**
  * MCP Session information
@@ -53,16 +54,18 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
   /**
    * OAuth 2.0 Authorization Server Metadata (RFC 8414)
    * MCP clients discover OAuth configuration from this endpoint
+   * Global endpoint (without slug) - returns generic metadata
    */
   app.get('/.well-known/oauth-authorization-server', (_req, res) => {
     const metadata = {
       issuer: config.nextAppUrl,
       authorization_endpoint: `${config.nextAppUrl}/authorize`,
       token_endpoint: `${config.nextAppUrl}/api/oauth/token`,
+      registration_endpoint: `${config.nextAppUrl}/api/oauth/register`,
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code'],
       code_challenge_methods_supported: ['S256'],
-      scopes_supported: ['x402:payments', 'mcp:tools'],
+      scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
       token_endpoint_auth_methods_supported: ['client_secret_post'],
     }
     res.json(metadata)
@@ -70,13 +73,57 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
 
   /**
    * OAuth 2.0 Protected Resource Metadata (RFC 9470)
+   * Global endpoint (without slug)
    */
   app.get('/.well-known/oauth-protected-resource', (req, res) => {
     const mcpServerUrl = `${req.protocol}://${req.get('host')}`
     const metadata = {
       resource: mcpServerUrl,
       authorization_servers: [config.nextAppUrl],
-      scopes_supported: ['x402:payments', 'mcp:tools'],
+      scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
+      bearer_methods_supported: ['header'],
+    }
+    res.json(metadata)
+  })
+
+  /**
+   * Slug-specific OAuth 2.0 Authorization Server Metadata (RFC 8414)
+   * Includes mcp_slug in authorization endpoint for workflow scope resolution
+   */
+  app.get('/mcp/:slug/.well-known/oauth-authorization-server', (req, res) => {
+    const slugParam = req.params.slug
+    const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam
+
+    const metadata = {
+      issuer: config.nextAppUrl,
+      authorization_endpoint: `${config.nextAppUrl}/authorize?mcp_slug=${encodeURIComponent(slug)}`,
+      token_endpoint: `${config.nextAppUrl}/api/oauth/token`,
+      response_types_supported: ['code'],
+      grant_types_supported: ['authorization_code'],
+      code_challenge_methods_supported: ['S256'],
+      scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
+      token_endpoint_auth_methods_supported: ['client_secret_post'],
+    }
+    res.json(metadata)
+  })
+
+  /**
+   * Slug-specific OAuth 2.0 Protected Resource Metadata (RFC 9470)
+   * Returns slug-specific resource identifier
+   * Points to the slug-aware OAuth endpoint on Next.js
+   */
+  app.get('/mcp/:slug/.well-known/oauth-protected-resource', (req, res) => {
+    const slugParam = req.params.slug
+    const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam
+    const mcpServerUrl = `${req.protocol}://${req.get('host')}`
+
+    const metadata = {
+      resource: `${mcpServerUrl}/mcp/${slug}`,
+      // Point to slug-aware OAuth discovery endpoint on Next.js
+      // The SDK will fetch {auth_server}/.well-known/oauth-authorization-server
+      // which maps to /oauth/:slug/.well-known/oauth-authorization-server on Next.js
+      authorization_servers: [`${config.nextAppUrl}/oauth/${encodeURIComponent(slug)}`],
+      scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
       bearer_methods_supported: ['header'],
     }
     res.json(metadata)
@@ -90,9 +137,16 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     res: Response,
     next: NextFunction
   ) => {
-    const slug = req.params.slug
+    const slugParam = req.params.slug
+    const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam
+
+    console.log(`[MCP Middleware] ${req.method} /mcp/${slug}`, {
+      hasAuthHeader: !!req.headers.authorization,
+      hasSessionId: !!req.headers['mcp-session-id'],
+    })
 
     if (!slug) {
+      console.log('[MCP Middleware] Missing slug')
       res.status(400).json({ error: 'Missing MCP server slug' })
       return
     }
@@ -105,14 +159,18 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     if (sessionId) {
       const session = sessions.get(sessionId)
       if (session) {
+        console.log(`[MCP Middleware] Using existing session: ${sessionId}`)
         // Verify the session is for the correct slug
         if (session.slug !== slug) {
+          console.log(`[MCP Middleware] Session slug mismatch: ${session.slug} vs ${slug}`)
           res.status(403).json({ error: 'Session does not match requested slug' })
           return
         }
         req.mcpAuth = session.auth
         next()
         return
+      } else {
+        console.log(`[MCP Middleware] Session ID provided but not found: ${sessionId}`)
       }
     }
 
@@ -121,20 +179,29 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     const auth = await validateBearerToken(authHeader)
 
     if (!auth) {
+      console.log('[MCP Middleware] Token validation failed, returning 401')
       // MCP OAuth requires WWW-Authenticate header with resource_metadata URL
       // See: https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/authorization/
-      const resourceMetadataUrl = `${req.protocol}://${req.get('host')}/.well-known/oauth-protected-resource`
+      // Use slug-specific resource metadata URL so client discovers slug-aware authorization endpoint
+      const resourceMetadataUrl = `${req.protocol}://${req.get('host')}/mcp/${slug}/.well-known/oauth-protected-resource`
       res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${resourceMetadataUrl}"`)
       res.status(401).json({
         error: 'unauthorized',
         error_description: 'Valid OAuth token required',
-        authorization_url: `${config.nextAppUrl}/authorize`,
+        authorization_url: `${config.nextAppUrl}/authorize?mcp_slug=${encodeURIComponent(slug)}`,
       })
       return
     }
 
+    console.log('[MCP Middleware] Token validated:', {
+      userId: auth.user.id,
+      tokenMcpSlug: auth.mcpSlug,
+      requestedSlug: slug,
+    })
+
     // Validate slug binding if token is scoped to a specific slug
     if (auth.mcpSlug && auth.mcpSlug !== slug) {
+      console.log(`[MCP Middleware] Slug mismatch: token=${auth.mcpSlug}, requested=${slug}`)
       res.status(403).json({
         error: 'forbidden',
         error_description: `Token is scoped to slug "${auth.mcpSlug}", not "${slug}"`,
@@ -142,6 +209,7 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       return
     }
 
+    console.log('[MCP Middleware] Auth successful, passing to handler')
     req.mcpAuth = auth
     next()
   }
@@ -168,11 +236,35 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       nextAppUrl: config.nextAppUrl,
     }
 
-    // Register tools
-    const tools = createToolsForServer(serverConfig.tools)
+    // Register proxy tools
+    const proxyTools = createToolsForServer(serverConfig.tools)
 
-    for (const tool of tools) {
+    for (const tool of proxyTools) {
       // Get the schema shape for the MCP SDK
+      const schemaShape = tool.inputSchema instanceof z.ZodObject
+        ? (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape
+        : {}
+
+      server.registerTool(
+        tool.name,
+        {
+          description: tool.description,
+          inputSchema: schemaShape,
+        },
+        async (args) => {
+          const result = await tool.handler(args as Record<string, unknown>, toolContext)
+          return {
+            content: result.content,
+            isError: result.isError,
+          }
+        }
+      )
+    }
+
+    // Register workflow tools
+    const workflowTools = createWorkflowToolsForServer(serverConfig.workflowTools, toolContext)
+
+    for (const tool of workflowTools) {
       const schemaShape = tool.inputSchema instanceof z.ZodObject
         ? (tool.inputSchema as z.ZodObject<z.ZodRawShape>).shape
         : {}
@@ -204,9 +296,15 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
     const auth = req.mcpAuth!
     const sessionId = req.headers['mcp-session-id'] as string | undefined
 
+    console.log('[MCP POST] Handling request for slug:', slug, {
+      hasSessionId: !!sessionId,
+      bodyMethod: req.body?.method,
+    })
+
     try {
       // Check for existing session
       if (sessionId && sessions.has(sessionId)) {
+        console.log('[MCP POST] Using existing session:', sessionId)
         const session = sessions.get(sessionId)!
         await session.transport.handleRequest(
           req as unknown as IncomingMessage,
@@ -217,12 +315,20 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       }
 
       // Load server configuration
+      console.log('[MCP POST] Loading server configuration for slug:', slug)
       const serverConfig = await toolRegistry.loadToolsForSlug(slug)
 
       if (!serverConfig) {
+        console.log('[MCP POST] Server not found for slug:', slug)
         res.status(404).json({ error: 'MCP server not found' })
         return
       }
+
+      console.log('[MCP POST] Server config loaded:', {
+        name: serverConfig.name,
+        toolCount: serverConfig.tools.length,
+        workflowCount: serverConfig.workflowTools.length,
+      })
 
       // Create new MCP server for this session
       const mcpServer = createMcpServer(serverConfig, auth)

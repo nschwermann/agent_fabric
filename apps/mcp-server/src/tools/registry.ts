@@ -1,6 +1,8 @@
 import { eq, asc } from 'drizzle-orm'
-import { db, mcpServers, mcpServerTools, apiProxies } from '../db/client.js'
-import type { McpServer, McpServerTool, ApiProxy } from '../db/client.js'
+import { db, mcpServers, mcpServerTools, mcpServerWorkflows, apiProxies, workflowTemplates } from '../db/client.js'
+import type { McpServer, McpServerTool, ApiProxy, WorkflowTemplate, McpServerWorkflow } from '../db/client.js'
+import type { WorkflowToolConfig } from './workflow-tool.js'
+import type { WorkflowDefinition, VariableDefinition } from '../workflows/types.js'
 
 /**
  * Tool configuration loaded from database
@@ -27,6 +29,7 @@ export interface McpServerConfig {
   description: string | null
   isPublic: boolean
   tools: ToolConfig[]
+  workflowTools: WorkflowToolConfig[]
 }
 
 /**
@@ -100,6 +103,32 @@ export class ToolRegistry {
       }
     }
 
+    // Get enabled workflow tools
+    const workflows = await db.query.mcpServerWorkflows.findMany({
+      where: eq(mcpServerWorkflows.mcpServerId, server.id),
+      orderBy: [asc(mcpServerWorkflows.displayOrder)],
+    })
+
+    const enabledWorkflows = workflows.filter((w) => w.isEnabled)
+    const workflowConfigs: WorkflowToolConfig[] = []
+
+    for (const sw of enabledWorkflows) {
+      const workflow = await db.query.workflowTemplates.findFirst({
+        where: eq(workflowTemplates.id, sw.workflowId),
+      })
+
+      if (workflow) {
+        workflowConfigs.push({
+          id: sw.id,
+          name: sw.toolName ?? toToolName(workflow.name),
+          description: sw.toolDescription ?? workflow.description ?? '',
+          workflowId: workflow.id,
+          inputSchema: workflow.inputSchema as VariableDefinition[],
+          workflowDefinition: workflow.workflowDefinition as WorkflowDefinition,
+        })
+      }
+    }
+
     const config: McpServerConfig = {
       id: server.id,
       slug: server.slug,
@@ -107,6 +136,7 @@ export class ToolRegistry {
       description: server.description,
       isPublic: server.isPublic,
       tools: toolConfigs,
+      workflowTools: workflowConfigs,
     }
 
     // Cache the result

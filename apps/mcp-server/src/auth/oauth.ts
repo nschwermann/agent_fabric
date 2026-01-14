@@ -29,15 +29,18 @@ export interface AuthContext {
  */
 export async function validateBearerToken(authHeader: string | null | undefined): Promise<AuthContext | null> {
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    console.log('[Auth] No valid Bearer header provided')
     return null
   }
 
   const token = authHeader.slice(7)
   if (!token) {
+    console.log('[Auth] Empty token')
     return null
   }
 
   const tokenHash = hashToken(token)
+  console.log('[Auth] Validating token hash:', tokenHash.slice(0, 16) + '...')
 
   // Direct database lookup (shared PostgreSQL)
   const accessToken = await db.query.oauthAccessTokens.findFirst({
@@ -49,8 +52,16 @@ export async function validateBearerToken(authHeader: string | null | undefined)
   })
 
   if (!accessToken) {
+    console.log('[Auth] Access token not found or expired')
     return null
   }
+
+  console.log('[Auth] Token found:', {
+    id: accessToken.id,
+    clientId: accessToken.clientId,
+    mcpSlug: accessToken.mcpSlug,
+    expiresAt: accessToken.expiresAt,
+  })
 
   // Get the session key
   const session = await db.query.sessionKeys.findFirst({
@@ -61,12 +72,18 @@ export async function validateBearerToken(authHeader: string | null | undefined)
   })
 
   if (!session) {
+    console.log('[Auth] Session key not found or inactive')
     return null
   }
 
   // Check if session is still valid (time bounds)
   const now = new Date()
   if (now < session.validAfter || now > session.validUntil) {
+    console.log('[Auth] Session outside valid time bounds:', {
+      validAfter: session.validAfter,
+      validUntil: session.validUntil,
+      now,
+    })
     return null
   }
 
@@ -76,8 +93,11 @@ export async function validateBearerToken(authHeader: string | null | undefined)
   })
 
   if (!user) {
+    console.log('[Auth] User not found')
     return null
   }
+
+  console.log('[Auth] Token validated successfully for user:', user.walletAddress)
 
   return {
     user,

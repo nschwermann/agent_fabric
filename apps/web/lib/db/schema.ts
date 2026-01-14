@@ -3,6 +3,123 @@ import type { VariableDefinition } from '@/features/proxy/model/variables'
 import type { HybridEncryptedData } from '@/lib/crypto/encryption'
 import type { SerializedSessionScope, OnChainParams } from '@/lib/sessionKeys/types'
 
+// ============================================================================
+// Workflow Types
+// ============================================================================
+
+/**
+ * On-chain operation within a workflow step
+ */
+export interface OnchainOperation {
+  /** Human-readable name for UI */
+  name?: string
+  /** Contract address or JSONPath expression (e.g., $.steps.X.output.address) */
+  target: string
+  /** Encoded calldata or JSONPath expression */
+  calldata?: string
+  /** Function selector (4 bytes hex, e.g., "0x095ea7b3") */
+  selector?: string
+  /** ABI fragment for encoding (e.g., "function approve(address spender, uint256 amount)") */
+  abiFragment?: string
+  /** Mapping of function args to JSONPath expressions */
+  argsMapping?: Record<string, string | string[]>
+  /** Native token value in wei (or JSONPath expression) */
+  value?: string
+}
+
+/**
+ * HTTP step configuration
+ */
+export interface HttpStepConfig {
+  /** Reference to existing api_proxy (uses its URL, headers, method) */
+  proxyId?: string
+  /** Inline URL (only if no proxyId) */
+  url?: string
+  /** HTTP method (only if no proxyId) */
+  method?: 'GET' | 'POST'
+  /** Additional headers (merged with proxy headers) */
+  headers?: Record<string, string>
+  /** Mapping of body fields to JSONPath expressions */
+  bodyMapping?: Record<string, unknown>
+}
+
+/**
+ * A single step in a workflow
+ */
+export interface WorkflowStep {
+  /** Unique step identifier */
+  id: string
+  /** Human-readable step name */
+  name: string
+  /** Step type */
+  type: 'http' | 'onchain' | 'onchain_batch' | 'condition' | 'transform'
+
+  /** HTTP step configuration */
+  http?: HttpStepConfig
+
+  /** Single on-chain operation */
+  onchain?: OnchainOperation
+
+  /** Batched on-chain operations (approve + swap in one tx) */
+  onchain_batch?: {
+    operations: OnchainOperation[]
+  }
+
+  /** Condition for branching (type: 'condition') */
+  condition?: {
+    expression: string
+    onTrue: string
+    onFalse?: string
+  }
+
+  /** Transform expression (type: 'transform') */
+  transform?: {
+    expression: string
+  }
+
+  /** Input mappings for this step */
+  inputMapping?: Record<string, string>
+
+  /** Key to store step output under */
+  outputAs: string
+
+  /** Whether to pause for user approval before executing */
+  requiresApproval?: boolean
+
+  /** Error handling strategy */
+  onError?: 'fail' | 'skip' | 'retry'
+}
+
+/**
+ * Scope configuration for workflow permissions
+ * Defines which contracts are allowed for dynamic targets
+ */
+export interface WorkflowScopeConfig {
+  /**
+   * Allowed contract addresses for dynamic targets (e.g., DEX aggregators, routers)
+   * These are used when the target is resolved at runtime ($.steps.X.output.address)
+   */
+  allowedDynamicTargets?: {
+    address: string
+    name?: string
+    description?: string
+  }[]
+}
+
+/**
+ * Complete workflow definition
+ */
+export interface WorkflowDefinition {
+  /** Schema version */
+  version: '1.0'
+  /** Workflow steps in execution order */
+  steps: WorkflowStep[]
+  /** Mapping of output fields to JSONPath expressions */
+  outputMapping: Record<string, string>
+  /** Scope configuration for permissions (optional) */
+  scopeConfig?: WorkflowScopeConfig
+}
+
 export const users = pgTable('users', {
   id: uuid('id').defaultRandom().primaryKey(),
   walletAddress: varchar('wallet_address', { length: 42 }).notNull().unique(),
@@ -142,6 +259,9 @@ export const oauthClients = pgTable('oauth_clients', {
 
   /** Scope IDs this client is allowed to request */
   allowedScopes: jsonb('allowed_scopes').$type<string[]>().notNull(),
+
+  /** MCP server slug this client is associated with (optional) */
+  mcpSlug: varchar('mcp_slug', { length: 50 }),
 
   /** Whether this client is active */
   isActive: boolean('is_active').default(true).notNull(),
@@ -302,6 +422,84 @@ export const mcpServerTools = pgTable('mcp_server_tools', {
   unique('unique_mcp_server_proxy').on(table.mcpServerId, table.apiProxyId),
 ])
 
+// ============================================================================
+// Workflow Tables
+// ============================================================================
+
+/**
+ * Workflow template definitions
+ * Workflows combine HTTP calls and on-chain execution steps
+ */
+export const workflowTemplates = pgTable('workflow_templates', {
+  id: uuid('id').defaultRandom().primaryKey(),
+
+  /** Owner of this workflow template */
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }).notNull(),
+
+  /** Unique slug for this workflow (per user) */
+  slug: varchar('slug', { length: 100 }).notNull(),
+
+  /** Human-readable name */
+  name: varchar('name', { length: 100 }).notNull(),
+
+  /** Description of what this workflow does */
+  description: text('description'),
+
+  /** Input schema (variables the workflow accepts) */
+  inputSchema: jsonb('input_schema').$type<VariableDefinition[]>().notNull().default([]),
+
+  /** The workflow definition (steps, mappings, outputs) */
+  workflowDefinition: jsonb('workflow_definition').$type<WorkflowDefinition>().notNull(),
+
+  /** Output schema (for documentation) */
+  outputSchema: jsonb('output_schema'),
+
+  /** Whether this workflow is publicly discoverable */
+  isPublic: boolean('is_public').default(false).notNull(),
+
+  /** Whether this workflow has been verified by admin */
+  isVerified: boolean('is_verified').default(false).notNull(),
+
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_workflow_templates_user').on(table.userId),
+  unique('unique_user_workflow_slug').on(table.userId, table.slug),
+])
+
+/**
+ * Workflows exposed by an MCP server
+ * Links MCP servers to workflow templates they want to expose as tools
+ */
+export const mcpServerWorkflows = pgTable('mcp_server_workflows', {
+  id: uuid('id').defaultRandom().primaryKey(),
+
+  /** The MCP server this workflow belongs to */
+  mcpServerId: uuid('mcp_server_id').references(() => mcpServers.id, { onDelete: 'cascade' }).notNull(),
+
+  /** The workflow template this tool wraps */
+  workflowId: uuid('workflow_id').references(() => workflowTemplates.id, { onDelete: 'cascade' }).notNull(),
+
+  /** Override tool name (defaults to workflow name if null) */
+  toolName: varchar('tool_name', { length: 100 }),
+
+  /** Override tool description */
+  toolDescription: text('tool_description'),
+
+  /** Display order for tool listing */
+  displayOrder: integer('display_order').default(0).notNull(),
+
+  /** Whether this tool is currently enabled */
+  isEnabled: boolean('is_enabled').default(true).notNull(),
+
+  // Metadata
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+}, (table) => [
+  index('idx_mcp_server_workflows_server').on(table.mcpServerId),
+  unique('unique_mcp_server_workflow').on(table.mcpServerId, table.workflowId),
+])
+
 // Type exports for use in application code
 export type User = typeof users.$inferSelect
 export type NewUser = typeof users.$inferInsert
@@ -329,3 +527,9 @@ export type NewMcpServer = typeof mcpServers.$inferInsert
 
 export type McpServerTool = typeof mcpServerTools.$inferSelect
 export type NewMcpServerTool = typeof mcpServerTools.$inferInsert
+
+export type WorkflowTemplate = typeof workflowTemplates.$inferSelect
+export type NewWorkflowTemplate = typeof workflowTemplates.$inferInsert
+
+export type McpServerWorkflow = typeof mcpServerWorkflows.$inferSelect
+export type NewMcpServerWorkflow = typeof mcpServerWorkflows.$inferInsert

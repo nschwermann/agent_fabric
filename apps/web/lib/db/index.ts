@@ -9,4 +9,5 @@ const client = postgres(connectionString, { prepare: false })
 
 export const db = drizzle(client, { schema })
 
+// Re-export all schema exports (tables, types, interfaces)
 export * from './schema'

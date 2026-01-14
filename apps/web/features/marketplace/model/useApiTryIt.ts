@@ -39,6 +39,8 @@ interface UseApiTryItOptions {
   proxyUrl: string
   httpMethod: string
   variablesSchema: VariableDefinition[]
+  /** Request body template to pre-populate the body field */
+  requestBodyTemplate?: string | null
   /** Optional session ID for session key signing */
   sessionId?: string
   /** Whether to use session key signing */
@@ -48,6 +50,8 @@ interface UseApiTryItOptions {
 interface UseApiTryItReturn {
   variables: Record<string, string>
   setVariable: (name: string, value: string) => void
+  requestBody: string
+  setRequestBody: (body: string) => void
   isLoading: boolean
   response: ApiResponse | null
   error: string | null
@@ -119,6 +123,7 @@ export function useApiTryIt({
   proxyUrl,
   httpMethod,
   variablesSchema,
+  requestBodyTemplate,
   sessionId,
   useSessionKey = false,
 }: UseApiTryItOptions): UseApiTryItReturn {
@@ -138,6 +143,9 @@ export function useApiTryIt({
     })
     return initial
   })
+
+  // Initialize request body with template if provided
+  const [requestBody, setRequestBody] = useState<string>(requestBodyTemplate || '')
 
   const [isLoading, setIsLoading] = useState(false)
   const [response, setResponse] = useState<ApiResponse | null>(null)
@@ -323,6 +331,9 @@ export function useApiTryIt({
 
       console.log('[x402 Client] Making initial request to:', proxyUrl)
 
+      // Determine if we should send a body (POST, PUT, PATCH)
+      const shouldSendBody = ['POST', 'PUT', 'PATCH'].includes(httpMethod.toUpperCase())
+
       // Step 1: Make initial request to get payment requirements
       const initialResponse = await fetch(proxyUrl, {
         method: httpMethod,
@@ -330,6 +341,7 @@ export function useApiTryIt({
           'Content-Type': 'application/json',
           'X-Variables': JSON.stringify(typedVariables),
         },
+        ...(shouldSendBody && requestBody ? { body: requestBody } : {}),
       })
 
       console.log('[x402 Client] Initial response status:', initialResponse.status)
@@ -380,6 +392,7 @@ export function useApiTryIt({
           'X-Variables': JSON.stringify(typedVariables),
           'X-PAYMENT': paymentHeaderBase64,
         },
+        ...(shouldSendBody && requestBody ? { body: requestBody } : {}),
       })
 
       console.log('[x402 Client] Paid response status:', paidResponse.status)
@@ -399,11 +412,13 @@ export function useApiTryIt({
     } finally {
       setIsLoading(false)
     }
-  }, [address, variables, variablesSchema, proxyUrl, httpMethod, createPaymentHeader])
+  }, [address, variables, variablesSchema, proxyUrl, httpMethod, requestBody, createPaymentHeader])
 
   return {
     variables,
     setVariable,
+    requestBody,
+    setRequestBody,
     isLoading,
     response,
     error,
