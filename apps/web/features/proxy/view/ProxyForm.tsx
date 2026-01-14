@@ -37,7 +37,7 @@ function getErrorMessages(errors: unknown[]): string {
 }
 
 export function ProxyForm() {
-  const { form, addHeader, removeHeader, addVariable, addVariablesByName, removeVariable, updateVariable, isEditing } = useProxyFormContext()
+  const { form, addHeader, removeHeader, addVariable, addVariablesByName, removeVariable, isEditing } = useProxyFormContext()
   const { isAuthenticated, isLoading: isAuthLoading } = useIsAuthenticated()
   const { open } = useAppKit()
   const [curlInput, setCurlInput] = useState('')
@@ -432,10 +432,10 @@ export function ProxyForm() {
                     which will be validated and substituted into your templates.
                   </FieldDescription>
                   <VariablesBuilder
+                    form={form}
                     variables={field.state.value}
                     onAdd={addVariable}
                     onRemove={removeVariable}
-                    onUpdate={updateVariable}
                   />
                   {field.state.meta.isTouched && field.state.meta.errors.length > 0 && (
                     <FieldError>{getErrorMessages(field.state.meta.errors)}</FieldError>

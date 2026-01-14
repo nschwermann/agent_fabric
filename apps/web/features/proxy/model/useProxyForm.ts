@@ -149,13 +149,6 @@ export function useProxyForm(options: UseProxyFormOptions = {}) {
     )
   }
 
-  const updateVariable = (index: number, updates: Partial<VariableDefinition>) => {
-    const currentVars = form.getFieldValue('variablesSchema') ?? []
-    const updated = [...currentVars]
-    updated[index] = { ...updated[index], ...updates }
-    form.setFieldValue('variablesSchema', updated)
-  }
-
   return {
     form,
     addHeader,
@@ -163,7 +156,6 @@ export function useProxyForm(options: UseProxyFormOptions = {}) {
     addVariable,
     addVariablesByName,
     removeVariable,
-    updateVariable,
     isEditing: !!proxyId,
   }
 }
