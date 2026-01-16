@@ -21,8 +21,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Agent402",
-  description: "AI-powered API marketplace with automatic crypto payments on Cronos. Enable your AI agents to pay for APIs autonomously with scoped session keys.",
+  title: "AgentFabric",
+  description: "An agent-native x402 execution fabric for Cronos. Programmable permissions for AI agents to safely interact with paid APIs and on-chain workflows.",
 };
 
 export default async function RootLayout({

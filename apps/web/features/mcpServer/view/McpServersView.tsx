@@ -1,7 +1,8 @@
 'use client'
 
 import { useCallback, useState } from 'react'
-import { Search, X, Loader2 } from 'lucide-react'
+import Link from 'next/link'
+import { Search, X, Loader2, Plus } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import {
@@ -51,11 +52,19 @@ export function McpServersView() {
   return (
     <div className="container py-8 space-y-8">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold">MCP Servers</h1>
-        <p className="text-muted-foreground mt-2">
-          Discover AI-ready MCP servers with tools and workflows for your agents
-        </p>
+      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold">MCP Servers</h1>
+          <p className="text-muted-foreground mt-2">
+            Discover AI-ready MCP servers with tools and workflows for your agents
+          </p>
+        </div>
+        <Link href="/dashboard/mcp">
+          <Button className="gap-2">
+            <Plus className="size-4" />
+            Create MCP Server
+          </Button>
+        </Link>
       </div>
 
       {/* Filters */}

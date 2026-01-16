@@ -24,7 +24,10 @@ export { ScopeConfigEditor } from './view/ScopeConfigEditor'
 export { WorkflowsListView } from './view/WorkflowsListView'
 export { WorkflowDetailView } from './view/WorkflowDetailView'
 export { WorkflowTestPanel } from './view/WorkflowTestPanel'
+export { PublicWorkflowsView } from './view/PublicWorkflowsView'
 
 // Hook exports
 export { useWorkflows, useWorkflow } from './model/useWorkflows'
 export type { WorkflowListItem, WorkflowDetail } from './model/useWorkflows'
+export { usePublicWorkflows } from './model/usePublicWorkflows'
+export type { PublicWorkflowItem, PublicWorkflowSortOption } from './model/usePublicWorkflows'

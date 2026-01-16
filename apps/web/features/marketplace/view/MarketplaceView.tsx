@@ -35,6 +35,12 @@ export function MarketplaceView() {
             Discover and use payment-gated APIs powered by x402
           </p>
         </div>
+        <Link href="/create">
+          <Button className="gap-2">
+            <Plus className="size-4" />
+            Create API
+          </Button>
+        </Link>
       </div>
 
       {/* Filters */}

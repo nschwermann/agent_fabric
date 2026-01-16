@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Plus, LayoutDashboard, Store, Home, Server, Workflow } from 'lucide-react'
+import { LayoutDashboard, Store, Server, Workflow } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { AnimatedThemeToggler } from '@/components/ui/animated-theme-toggler'
 import { UserStatus } from '@/features/user/view/UserStatus'
@@ -10,7 +10,6 @@ import { useUser } from '@/context/user'
 import { cn } from '@/lib/utils'
 
 const navLinks = [
-  { href: '/', label: 'Home', icon: Home },
   { href: '/explore', label: 'APIs', icon: Store },
   { href: '/mcp-servers', label: 'MCP Servers', icon: Server },
   { href: '/workflows', label: 'Workflows', icon: Workflow },
@@ -27,9 +26,9 @@ export function Header() {
       <div className="container flex h-14 items-center justify-between">
         <div className="flex items-center gap-6">
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-1.5 font-semibold text-xl">
+          <Link href="/" className="flex items-center gap-1 font-semibold text-xl">
             <span className="text-foreground">Agent</span>
-            <span className="text-primary/60 dark:text-primary font-bold">402</span>
+            <span className="text-primary font-bold">Fabric</span>
           </Link>
 
           {/* Navigation */}
@@ -58,12 +57,6 @@ export function Header() {
 
         {/* Right side */}
         <div className="flex items-center gap-3">
-          <Link href="/create">
-            <Button size="sm" className="gap-2">
-              <Plus className="size-4" />
-              <span className="hidden sm:inline">Create API</span>
-            </Button>
-          </Link>
           <AnimatedThemeToggler />
           <UserStatus />
         </div>

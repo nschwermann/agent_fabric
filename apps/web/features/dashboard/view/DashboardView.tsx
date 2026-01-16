@@ -1,26 +1,42 @@
 import Link from 'next/link'
-import { Plus, Loader2, AlertCircle } from 'lucide-react'
+import { Loader2, AlertCircle, Store, Server, Workflow, ArrowRight } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { useDashboard } from '../model/useDashboard'
 import { StatsCards } from './StatsCards'
 import { PeriodFilter } from './PeriodFilter'
-import { ProxyManagementCard } from './ProxyManagementCard'
 import { RequestLogsTable } from './RequestLogsTable'
 import { SessionManager } from '@/features/sessionKeys/view'
+
+const manageLinks = [
+  {
+    href: '/dashboard/apis',
+    title: 'APIs',
+    description: 'Create and manage your payment-gated API proxies',
+    icon: Store,
+  },
+  {
+    href: '/dashboard/mcp',
+    title: 'MCP Server',
+    description: 'Configure your MCP server for AI agent integration',
+    icon: Server,
+  },
+  {
+    href: '/dashboard/workflows',
+    title: 'Workflows',
+    description: 'Build and manage reusable workflow templates',
+    icon: Workflow,
+  },
+]
 
 export function DashboardView() {
   const {
     totals,
-    proxies,
     recentLogs,
     isLoading,
     error,
     period,
     setPeriod,
-    deleteProxy,
-    isDeleting,
-    toggleVisibility,
-    isTogglingVisibility,
   } = useDashboard()
 
   if (isLoading) {
@@ -55,18 +71,10 @@ export function DashboardView() {
         <div>
           <h1 className="text-3xl font-bold">Dashboard</h1>
           <p className="text-muted-foreground mt-1">
-            Manage your APIs and track their performance
+            Manage your creations and track performance
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <PeriodFilter period={period} onPeriodChange={setPeriod} />
-          <Link href="/create">
-            <Button className="gap-2">
-              <Plus className="size-4" />
-              Create API
-            </Button>
-          </Link>
-        </div>
+        <PeriodFilter period={period} onPeriodChange={setPeriod} />
       </div>
 
       {/* Stats */}
@@ -75,35 +83,36 @@ export function DashboardView() {
       {/* Session Keys */}
       <SessionManager />
 
-      {/* APIs */}
+      {/* Management Links */}
       <div className="space-y-4">
-        <h2 className="text-xl font-semibold">Your APIs</h2>
-        {proxies.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 text-center border rounded-lg bg-muted/50">
-            <p className="text-muted-foreground mb-4">
-              You haven't created any APIs yet. Create your first one to start earning!
-            </p>
-            <Link href="/create">
-              <Button className="gap-2">
-                <Plus className="size-4" />
-                Create Your First API
-              </Button>
-            </Link>
-          </div>
-        ) : (
-          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {proxies.map((proxy) => (
-              <ProxyManagementCard
-                key={proxy.id}
-                proxy={proxy}
-                onDelete={deleteProxy}
-                onToggleVisibility={toggleVisibility}
-                isDeleting={isDeleting}
-                isTogglingVisibility={isTogglingVisibility}
-              />
-            ))}
-          </div>
-        )}
+        <h2 className="text-xl font-semibold">Manage</h2>
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {manageLinks.map((link) => {
+            const Icon = link.icon
+            return (
+              <Link key={link.href} href={link.href}>
+                <Card className="h-full hover:border-primary/50 transition-colors cursor-pointer group">
+                  <CardHeader>
+                    <div className="flex items-center gap-3">
+                      <div className="p-2 rounded-lg bg-primary/10">
+                        <Icon className="size-5 text-primary" />
+                      </div>
+                      <CardTitle className="text-lg group-hover:text-primary transition-colors">
+                        {link.title}
+                      </CardTitle>
+                    </div>
+                  </CardHeader>
+                  <CardContent>
+                    <CardDescription className="flex items-center justify-between">
+                      <span>{link.description}</span>
+                      <ArrowRight className="size-4 text-muted-foreground group-hover:text-primary transition-colors" />
+                    </CardDescription>
+                  </CardContent>
+                </Card>
+              </Link>
+            )
+          })}
+        </div>
       </div>
 
       {/* Recent Requests */}

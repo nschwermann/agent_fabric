@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { ArrowRight, Bot, Key, Zap } from 'lucide-react'
+import { ArrowRight, Bot, Box, Server, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useParallax } from '@/hooks/useScrollAnimation'
 
@@ -23,79 +23,128 @@ export function HeroSection() {
       </div>
 
       <div className="container">
-        <div className="max-w-3xl mx-auto text-center space-y-8">
-          {/* Badge */}
-          <div
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-primary/10 text-primary text-sm font-medium animate-fade-in"
-            style={{ animationDelay: '100ms', animationFillMode: 'both' }}
-          >
-            <Bot className="size-4" />
-            <span>AI Agent Payments on Cronos</span>
-          </div>
-
-          {/* Headline */}
-          <h1
-            className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight animate-fade-in"
-            style={{ animationDelay: '200ms', animationFillMode: 'both' }}
-          >
-            Let Your AI Agents
-            <span className="text-primary block mt-2">Pay for APIs Automatically</span>
-          </h1>
-
-          {/* Subheadline */}
-          <p
-            className="text-lg sm:text-xl text-muted-foreground max-w-2xl mx-auto animate-fade-in"
-            style={{ animationDelay: '400ms', animationFillMode: 'both' }}
-          >
-            Agent402 enables autonomous payments with scoped session keys.
-            AI agents can pay for APIs without requiring user approval for every transaction.
-          </p>
-
-          {/* CTAs */}
-          <div
-            className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-in"
-            style={{ animationDelay: '600ms', animationFillMode: 'both' }}
-          >
-            <Link href="/explore">
-              <Button size="lg" className="gap-2 text-base px-8">
-                Browse APIs
-                <ArrowRight className="size-5" />
-              </Button>
-            </Link>
-            <Link href="/create">
-              <Button size="lg" variant="outline" className="gap-2 text-base px-8">
-                Create API
-              </Button>
-            </Link>
-          </div>
-
-          {/* Secondary CTA */}
-          <div
-            className="pt-4 animate-fade-in"
-            style={{ animationDelay: '800ms', animationFillMode: 'both' }}
-          >
-            <Link
-              href="/dashboard"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+        <div className="grid lg:grid-cols-2 gap-12 lg:gap-16 items-center">
+          {/* Left: Text Content */}
+          <div className="space-y-8">
+            {/* Badge */}
+            <div
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-full border border-primary/20 bg-primary/5 text-primary text-sm font-medium animate-fade-in"
+              style={{ animationDelay: '100ms', animationFillMode: 'both' }}
             >
-              Already have an account? Go to Dashboard
-            </Link>
-          </div>
-        </div>
+              <span>Built on Cronos EVM</span>
+              <span className="text-muted-foreground">•</span>
+              <span>x402-native</span>
+              <span className="text-muted-foreground">•</span>
+              <span>MCP-compatible</span>
+            </div>
 
-        {/* Hero visual - animated icons with parallax */}
-        <div
-          className="mt-16 flex items-center justify-center gap-8 opacity-60 dark:opacity-80"
-          style={{ transform: `translateY(${scrollY * -0.15}px)` }}
-        >
-          <div className="animate-pulse">
-            <Key className="size-8 text-primary dark:text-primary/90" />
+            {/* Headline */}
+            <h1
+              className="text-4xl sm:text-5xl lg:text-6xl font-bold tracking-tight animate-fade-in"
+              style={{ animationDelay: '200ms', animationFillMode: 'both' }}
+            >
+              Agents with limits.
+            </h1>
+
+            {/* Subheadline */}
+            <p
+              className="text-xl sm:text-2xl text-primary font-medium animate-fade-in"
+              style={{ animationDelay: '350ms', animationFillMode: 'both' }}
+            >
+              Programmable permissions for AI agents.
+            </p>
+
+            {/* Supporting line */}
+            <p
+              className="text-lg text-muted-foreground max-w-xl animate-fade-in"
+              style={{ animationDelay: '500ms', animationFillMode: 'both' }}
+            >
+              AgentFabric is an agent-native x402 execution fabric that lets AI agents safely
+              interact with paid APIs and on-chain workflows on Cronos — without ever accessing
+              a user&apos;s private keys.
+            </p>
+
+            {/* CTAs */}
+            <div
+              className="flex flex-col sm:flex-row items-start gap-4 animate-fade-in"
+              style={{ animationDelay: '650ms', animationFillMode: 'both' }}
+            >
+              <a href="#how-it-works">
+                <Button size="lg" className="gap-2 text-base px-8">
+                  How it Works
+                  <ArrowRight className="size-5" />
+                </Button>
+              </a>
+              <Link href="https://github.com/nschwermann/agent_fabric" target="_blank" rel="noopener noreferrer">
+                <Button size="lg" variant="outline" className="gap-2 text-base px-8">
+                  Read the Docs
+                </Button>
+              </Link>
+            </div>
           </div>
-          <div className="animate-pulse" style={{ animationDelay: '150ms' }}>
-            <Zap className="size-10 text-primary dark:text-primary/90" />
-          </div>
-          <div className="animate-pulse" style={{ animationDelay: '300ms' }}>
-            <Bot className="size-8 text-primary dark:text-primary/90" />
+
+          {/* Right: Flow Diagram */}
+          <div
+            className="relative hidden lg:block animate-fade-in"
+            style={{ animationDelay: '400ms', animationFillMode: 'both', transform: `translateY(${scrollY * -0.1}px)` }}
+          >
+            <div className="relative">
+              {/* Flow diagram container */}
+              <div className="flex flex-col items-center gap-6">
+                {/* Agent */}
+                <div className="flex items-center gap-4">
+                  <div className="p-4 rounded-xl bg-card border border-border shadow-lg">
+                    <Bot className="size-8 text-foreground" />
+                  </div>
+                  <span className="text-sm font-medium text-muted-foreground">AI Agent</span>
+                </div>
+
+                {/* Arrow down */}
+                <div className="w-px h-8 bg-gradient-to-b from-border to-primary/50" />
+
+                {/* AgentFabric Box - Permission Boundary */}
+                <div className="relative p-8 rounded-2xl border-2 border-primary/30 bg-primary/5">
+                  {/* Dashed boundary indicator */}
+                  <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full bg-background border border-primary/30 text-xs text-primary font-medium">
+                    Permission Boundary
+                  </div>
+
+                  <div className="flex items-center gap-4">
+                    <div className="p-4 rounded-xl bg-primary/10 border border-primary/20">
+                      <Layers className="size-8 text-primary" />
+                    </div>
+                    <div>
+                      <span className="text-lg font-semibold text-foreground block">AgentFabric</span>
+                      <span className="text-sm text-muted-foreground">Scoped execution layer</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Arrow down splitting */}
+                <div className="relative w-48 h-8">
+                  <div className="absolute left-1/2 top-0 w-px h-4 bg-gradient-to-b from-primary/50 to-border -translate-x-1/2" />
+                  <div className="absolute left-1/2 top-4 w-40 h-px bg-border -translate-x-1/2" />
+                  <div className="absolute left-[calc(50%-80px)] top-4 w-px h-4 bg-border" />
+                  <div className="absolute left-[calc(50%+80px)] top-4 w-px h-4 bg-border" />
+                </div>
+
+                {/* APIs + Cronos */}
+                <div className="flex items-center gap-12">
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="p-3 rounded-xl bg-card border border-border shadow-md">
+                      <Server className="size-6 text-muted-foreground" />
+                    </div>
+                    <span className="text-xs font-medium text-muted-foreground">Paid APIs</span>
+                  </div>
+                  <div className="flex flex-col items-center gap-2">
+                    <div className="p-3 rounded-xl bg-card border border-border shadow-md">
+                      <Box className="size-6 text-muted-foreground" />
+                    </div>
+                    <span className="text-xs font-medium text-muted-foreground">Cronos</span>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>

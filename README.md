@@ -1,198 +1,250 @@
-# x402 Payment Marketplace
+# AgentFabric
 
-A decentralized API marketplace built on Cronos blockchain using the x402 payment protocol. Enables developers to monetize APIs with cryptocurrency payments and supports AI agent integration.
+**Agents with limits.**
 
-**Hackathon**: [Cronos x402 Paytech Hackathon](https://dorahacks.io/hackathon/cronos-x402/detail)
+AgentFabric is an agent-native x402 execution fabric that enables AI agents to safely interact with paid APIs and on-chain workflows on Cronos EVM, using scoped, programmable permissions.
 
----
-
-## Quick Links
-
-- **[Product Requirements Document](docs/prd/README.md)** - Start here for project overview
-- **[Technical Stack](docs/prd/technical-stack.md)** - Complete tech stack including SIWE
-- **[Research Findings](docs/prd/research-findings.md)** - x402, Cronos, and blockchain research
-- **[Security Guidelines](docs/prd/security.md)** - Security requirements
-- **[Development Workflow](docs/prd/development-workflow.md)** - Git, testing, deployment
+Agents never access a user's primary private key.
+Instead, they operate via session keys with explicit, enforceable limits — such as which protocol, which asset, and how much value they are allowed to use.
 
 ---
 
-## Features (Priority Order)
+## What AgentFabric Enables
 
-### Priority 1-3: MVP (Must Have)
-1. **[x402 Proxy](docs/features/feature-1-proxy.md)** - Create payment-gated API endpoints
-2. **[Payment Signing & SIWE Auth](docs/features/feature-2-payments.md)** - Wallet authentication and payments
-3. **[API Marketplace](docs/features/feature-3-marketplace.md)** - Discover and test public APIs
+- AI agents that can execute on-chain actions safely
+- x402-native APIs with usage-based settlement
+- Composable workflows combining APIs + smart contracts
+- MCP servers for agent discovery and interaction
+- Bounded autonomy via scoped session permissions
 
-### Priority 4-5: Extended Features
-4. **[Payment Splitting](docs/features/feature-4-payment-splitting.md)** - Multi-party revenue sharing (ERC-1167)
-5. **[MCP Server](docs/features/feature-5-mcp-server.md)** - AI agent integration via Model Context Protocol
-
-### Priority 6-7: Stretch Goals
-6. **[AI Chat Interface](docs/features/feature-6-ai-chat.md)** - Built-in AI chat with API tools
-7. **[AI Agent Wallet](docs/features/feature-7-agent-wallet.md)** - Autonomous AI wallet (ERC-4337)
+AgentFabric turns APIs and workflows into agent-readable economic primitives, without sacrificing custody or control.
 
 ---
 
-## Technology Stack
+## Why AgentFabric Exists
 
-### Frontend
-- Next.js 14+ (App Router)
-- TypeScript
-- Tailwind CSS + shadcn/ui
-- wagmi + viem (blockchain)
-- SIWE (authentication)
-- @x402/* packages (payments)
+AI agents are becoming capable of real financial decision-making — but today's execution models are broken:
 
-### Backend
-- Next.js API routes
-- PostgreSQL + Drizzle ORM
-- iron-session (encrypted sessions)
+- Agents either cannot act at all, or
+- They require full access to private keys, creating unacceptable risk
 
-### Smart Contracts
-- Hardhat
-- OpenZeppelin
-- Solidity 0.8.24+
+This tradeoff blocks adoption of agentic finance.
 
-### Blockchain
-- Cronos testnet (Chain ID: 338)
-- Cronos mainnet (Chain ID: 25)
+AgentFabric solves this by introducing a permissioned execution layer:
 
----
+- autonomy without custody
+- composability without danger
+- automation without hot wallets
 
-## Project Structure
+```mermaid
+flowchart LR
+  subgraph TODAY["Today (Broken Model)"]
+    A1["AI Agent"] --> W1["Wallet / EOA\nFull private key access"]
+    W1 --> X1["On-chain actions"]
+    W1 --> Y1["APIs"]
+    NOTE1["Unlimited permissions\nHigh blast radius\nUnsafe for automation"]:::warn
+  end
 
-```
-x402-hackathon/
-├── docs/
-│   ├── prd/              # Planning documents
-│   └── features/         # Feature specifications
-├── src/
-│   ├── app/              # Next.js app
-│   ├── components/       # React components
-│   ├── lib/              # Utilities & integrations
-│   └── types/            # TypeScript types
-├── contracts/            # Smart contracts (Hardhat)
-├── mcp-server/           # MCP server (Priority 5)
-└── public/               # Static assets
+  subgraph AF["AgentFabric Model (Bounded Autonomy)"]
+    A2["AI Agent"] --> S2["Scoped Session Key\n(least privilege)"]
+    S2 --> F2["AgentFabric\nPermission Enforcement"]:::good
+    F2 --> API2["x402 APIs\nPaid, usage-based"]
+    F2 --> C2["Cronos EVM\nSmart Account + Protocols"]
+    P2["Allowed protocol\nAllowed asset\nMax value\nAllowed methods"]:::good
+  end
+
+  classDef warn fill:#2b1b1b,stroke:#ff6b6b,stroke-width:2px,color:#ffffff;
+  classDef good fill:#152a20,stroke:#4ade80,stroke-width:2px,color:#ffffff;
+
 ```
 
 ---
 
-## Getting Started (For Implementation Agents)
+## Core Architecture
 
-### When Assigned a Feature:
+AgentFabric is built around five core primitives:
 
-1. **Read the feature spec**: `docs/features/feature-X-[name].md`
-2. **Review tech stack**: `docs/prd/technical-stack.md`
-3. **Check security**: `docs/prd/security.md`
-4. **Propose implementation plan** to user for approval
-5. **Implement** with clean, tested code
-6. **Verify** against "Definition of Done" in feature spec
+### 1. Smart Account Upgrade
 
-### Development Principles:
+A standard EOA is upgraded into a smart account capable of enforcing:
 
-- ✅ One vertical slice at a time
-- ✅ Always get user approval before coding
-- ✅ Write clean, well-architected code
-- ✅ Security first
-- ✅ Follow TypeScript strict mode
+- session keys
+- scoped permissions
+- bounded execution
+
+The primary key is never shared.
 
 ---
 
-## Key Concepts
+### 2. Scoped Session Keys
 
-### x402 Protocol
-HTTP-based payment protocol using 402 status code for blockchain payments. Server returns 402 with payment details, client signs payment, retries request with signature.
+Session keys define exactly what an agent can do, including:
 
-### SIWE (Sign-In with Ethereum)
-Password-less authentication using wallet signatures (EIP-4361). Users sign a message to prove wallet ownership.
+- allowed contracts / protocols
+- permitted assets
+- maximum value
+- specific methods (e.g. swap only)
 
-### Cronos x402 Facilitator
-Third-party service that verifies x402 payments and handles gasless USDC transfers on Cronos using EIP-3009.
+This follows the principle of least privilege.
 
-### Zero-Knowledge Encryption
-User credentials encrypted with key derived from wallet signature. Only the user who can sign with their wallet can decrypt.
+```mermaid
+flowchart TB
+  OWNER["Primary Key (Owner)\nNever shared with agent"]:::owner
 
----
+  SA["Smart Account (Cronos EVM)\nPermission Engine + Enforcement"]:::good
+  OWNER --> SA
 
-## Success Metrics
+  SK["Session Key (Delegated)\n- Valid until: timeboxed\n- Allowed protocol: WolfSwap\n- Allowed methods: swap()\n- Max spend: 5 CRO\n- Optional: allowed assets"]:::good
 
-### MVP
-- [ ] User can authenticate with SIWE
-- [ ] User can create payment-gated API proxy
-- [ ] Consumer can pay and access API
-- [ ] Marketplace shows public APIs
+  AG["AI Agent"] --> SK
+  SK --> SA
 
-### Extended
-- [ ] Payment splitting on Cronos testnet
-- [ ] MCP server integration working
+  SA --> CHAIN["Cronos EVM\nDEX / Protocol Contracts"]:::chain
 
-### Stretch
-- [ ] AI chat with x402 payments
-- [ ] Agent wallet functional
-
----
-
-## Documentation Organization
-
-### For Planning
-- Start with `docs/prd/README.md` for overview
-- Review research findings for technical background
-- Understand development workflow
-
-### For Implementation
-- Each feature has its own spec in `docs/features/`
-- Specs include user stories, technical requirements, UI components, and definition of done
-- Reference technical stack and security docs as needed
-
----
-
-## Environment Setup
-
-```bash
-# Install dependencies
-npm install
-
-# Setup database (Docker)
-docker run --name x402-postgres \
-  -e POSTGRES_PASSWORD=dev_password \
-  -e POSTGRES_DB=x402_marketplace \
-  -p 5432:5432 \
-  -d postgres:15
-
-# Configure environment
-cp .env.example .env.local
-# Edit .env.local with your values
-
-# Run migrations
-npm run db:migrate
-
-# Start dev server
-npm run dev
+  classDef owner fill:#1f2430,stroke:#93c5fd,stroke-width:2px,color:#ffffff;
+  classDef good fill:#152a20,stroke:#4ade80,stroke-width:2px,color:#ffffff;
+  classDef chain fill:#1c1c1c,stroke:#a78bfa,stroke-width:2px,color:#ffffff;
 ```
 
 ---
 
-## Resources
+### 3. x402 API Proxies
 
-### Official Documentation
-- [x402 Specification](https://github.com/coinbase/x402)
-- [Coinbase x402 Docs](https://docs.cdp.coinbase.com/x402/welcome)
-- [Cronos x402 Facilitator](https://docs.cronos.org/cronos-x402-facilitator/introduction)
-- [Cronos Developer Docs](https://docs.cronos.org/)
-- [SIWE Documentation](https://docs.login.xyz/)
+Any API can be wrapped as an x402-compatible, usage-based endpoint, allowing:
 
-### Community
-- Cronos Discord
-- Hackathon page: https://dorahacks.io/hackathon/cronos-x402/detail
+- programmatic payment
+- agent-native consumption
+- composable economic primitives
+
+---
+
+### 4. Workflow Fabric
+
+Multi-step workflows combine:
+
+- x402 API calls
+- on-chain actions
+- conditional logic
+
+Workflows are reusable, permissionable, and agent-readable.
+
+```mermaid
+flowchart LR
+  API["Standard API"] --> PROXY["x402 API Proxy\nUsage-based settlement"]:::good
+
+  subgraph WF["Workflow Fabric"]
+    A["x402 API Call(s)"] --> W["Composable Workflow\nReusable + Permissionable\nAgent-readable"]:::good
+    B["On-chain Action(s)\n(Cronos EVM)"] --> W
+    C["Optional: Conditional Logic\n(routing / checks)"] --> W
+  end
+
+  W --> MCP["MCP Server\nPublish capabilities to agents"]
+  MCP --> AG["AI Agent"]
+
+  classDef good fill:#152a20,stroke:#4ade80,stroke-width:2px,color:#ffffff;
+```
+
+---
+
+### 5. MCP Servers
+
+Selected APIs and workflows are exposed as MCP servers, enabling:
+
+- agent discovery
+- standardized invocation
+- safe execution surfaces for AI systems like ChatGPT and Claude
+
+---
+
+## End-to-End Flow (High Level)
+
+
+1. A developer or user defines APIs and workflows
+2. A smart account is deployed or upgraded
+3. A scoped session key is generated for an agent
+4. APIs and workflows are exposed via an MCP server
+5. The agent discovers, reasons, and executes within strict boundaries
+6. Transactions settle on Cronos using x402-compatible flows
+
+**Result:** autonomous execution without autonomous risk.
+
+```mermaid
+flowchart LR
+  AG["AI Agent\n(ChatGPT / Claude / Custom Agent)"] --> MCP["MCP Server\nAgent-facing execution surface\nDiscoverable capabilities"]
+  MCP --> AF["AgentFabric\nx402 Execution Fabric\nAPI Proxies + Workflow Engine\nPermission Enforcement"]:::good
+  AF --> X402["x402 APIs\nPaid, usage-based settlement"]
+  AF --> CR["Cronos EVM\nSmart Account + DeFi Protocols"]:::good
+
+  SK["Scoped Session Key\nAllowed protocol / asset / methods\nMax value + expiry"]:::good
+  AG -. uses .-> SK
+  SK -. authorizes .-> AF
+
+  classDef good fill:#152a20,stroke:#4ade80,stroke-width:2px,color:#ffffff;
+```
+
+---
+
+## Demo Scenario (Hackathon Highlight)
+
+In the demo, AgentFabric shows an AI agent performing the following task:
+
+> "Find the top trending token on Cronos today and buy 5 CRO worth of it."
+
+Using AgentFabric, the agent:
+
+1. Queries a paid x402 API for trending tokens
+2. Selects the top result
+3. Executes a swap via a prebuilt WolfSwap DEX aggregation workflow
+4. Settles the transaction on Cronos EVM
+
+At no point does the agent access the user's private key.
+All actions are executed within scoped permissions.
+
+---
+
+## Built for Cronos & x402
+
+AgentFabric is:
+
+- deployed on Cronos EVM
+- designed for x402-style programmatic payments
+- compatible with Crypto.com ecosystem tooling
+- aligned with agentic finance and AI-native infrastructure
+
+This makes Cronos a safe, first-class execution environment for AI agents.
+
+---
+
+## Use Cases
+
+- Agent-triggered DeFi actions
+- Automated portfolio management
+- Risk-bounded trading bots
+- Paid API access for AI agents
+- Agent-readable developer tooling
+- Institutional-grade agent workflows
+
+---
+
+## Hackathon Tracks
+
+AgentFabric qualifies for:
+
+- Main Track — x402 Applications
+- x402 Agentic Finance / Payment Track
+- Crypto.com x Cronos Ecosystem Integration
+- Dev Tooling & Data Virtualization Track
 
 ---
 
 ## License
 
-MIT (or as required by hackathon)
+MIT
 
 ---
 
-**Status**: Planning Complete - Ready for Implementation
-**Last Updated**: 2025-12-12
+## Links
+
+- Website: https://agentfabric.tools
+- Demo: *(link once recorded)*
+- Hackathon Submission: https://dorahacks.io/hackathon/cronos-x402/buidl

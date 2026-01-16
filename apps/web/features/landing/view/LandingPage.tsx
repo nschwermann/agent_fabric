@@ -1,17 +1,23 @@
 import { HeroSection } from './HeroSection'
-import { FeatureSection } from './FeatureSection'
+import { ProblemSection } from './ProblemSection'
+import { SolutionSection } from './SolutionSection'
 import { HowItWorksSection } from './HowItWorksSection'
-import { MarketplacePreview } from './MarketplacePreview'
+import { WhyCronosSection } from './WhyCronosSection'
+import { AudienceSection } from './AudienceSection'
 import { CtaSection } from './CtaSection'
+import { Footer } from './Footer'
 
 export function LandingPage() {
   return (
     <div className="min-h-screen">
       <HeroSection />
-      <FeatureSection />
+      <ProblemSection />
+      <SolutionSection />
       <HowItWorksSection />
-      <MarketplacePreview />
+      <WhyCronosSection />
+      <AudienceSection />
       <CtaSection />
+      <Footer />
     </div>
   )
 }
