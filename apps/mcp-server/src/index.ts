@@ -16,6 +16,13 @@ async function main() {
   // Dynamic import AFTER env vars are loaded (ESM hoists static imports)
   const { createApp, shutdown } = await import('./server.js')
 
+  // Debug: Log all relevant env vars
+  console.log('[MCP Server] Environment check:')
+  console.log(`  - DATABASE_URL set: ${!!process.env.DATABASE_URL}`)
+  console.log(`  - NEXT_APP_URL: ${process.env.NEXT_APP_URL}`)
+  console.log(`  - PORT: ${process.env.PORT}`)
+  console.log(`  - CHAIN_ID: ${process.env.CHAIN_ID}`)
+
   // Configuration
   const PORT = parseInt(process.env.PORT ?? '3001', 10)
   const NEXT_APP_URL = process.env.NEXT_APP_URL ?? 'http://localhost:3000'
