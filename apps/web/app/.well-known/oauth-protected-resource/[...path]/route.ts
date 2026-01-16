@@ -59,7 +59,7 @@ export async function GET(
     bearer_methods_supported: ['header'],
 
     // Resource documentation
-    resource_documentation: `${resourceUrl}/docs/mcp`,
+    resource_documentation: `${nextAppUrl}/docs/mcp`,
   }
 
   return NextResponse.json(metadata, {
