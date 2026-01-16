@@ -196,4 +196,9 @@ export function getDb() {
   return dbInstance
 }
 
-export const db = getDb()
+// Lazy getter for db - only initializes when first accessed
+export const db = new Proxy({} as PostgresJsDatabase<typeof schema>, {
+  get(_, prop) {
+    return Reflect.get(getDb(), prop)
+  },
+})
