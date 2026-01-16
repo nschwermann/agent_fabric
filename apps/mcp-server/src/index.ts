@@ -32,10 +32,10 @@ async function main() {
     chainId: CHAIN_ID,
   })
 
-  // Start the server
-  const server = app.listen(PORT, () => {
-    console.log(`[MCP Server] Running at http://localhost:${PORT}`)
-    console.log(`[MCP Server] MCP endpoints: http://localhost:${PORT}/mcp/:slug`)
+  // Start the server (bind to 0.0.0.0 for cloud deployments)
+  const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`[MCP Server] Running at http://0.0.0.0:${PORT}`)
+    console.log(`[MCP Server] MCP endpoints: http://0.0.0.0:${PORT}/mcp/:slug`)
   })
 
   // Graceful shutdown handlers
