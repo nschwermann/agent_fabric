@@ -13,21 +13,6 @@ export interface RedisConfig {
   maxRetriesPerRequest?: number
 }
 
-function parseRedisUrl(url?: string): RedisConfig {
-  if (url) {
-    try {
-      const parsed = new URL(url)
-      return {
-        host: parsed.hostname || 'localhost',
-        port: parseInt(parsed.port, 10) || 6379,
-      }
-    } catch {
-      console.warn('[Redis] Invalid REDIS_URL, using defaults')
-    }
-  }
-  return { host: 'localhost', port: 6379 }
-}
-
 // Singleton instance
 let instance: Redis | null = null
 
@@ -37,11 +22,11 @@ let instance: Redis | null = null
  */
 export function getRedisClient(): Redis {
   if (!instance) {
-    const config = parseRedisUrl(process.env.REDIS_URL)
+    const redisUrl = process.env.REDIS_URL
 
-    instance = new Redis({
-      host: config.host,
-      port: config.port,
+    // ioredis accepts full URL strings including auth and TLS settings
+    // e.g., redis://:password@host:port or rediss://... for TLS
+    instance = new Redis(redisUrl || 'redis://localhost:6379', {
       maxRetriesPerRequest: 3,
       retryStrategy(times) {
         if (times > 3) return null
@@ -54,7 +39,7 @@ export function getRedisClient(): Redis {
     })
 
     instance.on('connect', () => {
-      console.log(`[Redis] Connected to ${config.host}:${config.port}`)
+      console.log('[Redis] Connected')
     })
   }
 
