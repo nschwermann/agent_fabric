@@ -26,16 +26,19 @@ async function main() {
   // Configuration
   const PORT = parseInt(process.env.PORT ?? '3001', 10)
   const NEXT_APP_URL = process.env.NEXT_APP_URL ?? 'http://localhost:3000'
+  const MCP_PUBLIC_URL = process.env.MCP_PUBLIC_URL ?? null
   const CHAIN_ID = parseInt(process.env.CHAIN_ID ?? '338', 10)
   console.log('[MCP Server] Starting...')
   console.log(`[MCP Server] Configuration:`)
   console.log(`  - Port: ${PORT}`)
   console.log(`  - Next.js App URL: ${NEXT_APP_URL}`)
+  console.log(`  - MCP Public URL: ${MCP_PUBLIC_URL ?? '(auto-detect from request)'}`)
   console.log(`  - Chain ID: ${CHAIN_ID}`)
 
   // Create the Express app
   const app = createApp({
     nextAppUrl: NEXT_APP_URL,
+    mcpPublicUrl: MCP_PUBLIC_URL,
     chainId: CHAIN_ID,
   })
 

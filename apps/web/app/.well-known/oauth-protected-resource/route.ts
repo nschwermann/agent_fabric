@@ -10,10 +10,11 @@ import { NextRequest, NextResponse } from 'next/server'
  */
 export async function GET(request: NextRequest) {
   const resourceUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
-  const mcpServerUrl = process.env.MCP_SERVER_URL || 'http://localhost:3001'
+  // Use MCP_PUBLIC_URL for the resource (subdomain for direct client access)
+  const mcpServerUrl = process.env.MCP_PUBLIC_URL || 'http://localhost:3001'
 
   const metadata = {
-    // The protected resource identifier
+    // The protected resource identifier (public URL for direct client access)
     resource: mcpServerUrl,
 
     // Authorization servers that can be used to obtain tokens

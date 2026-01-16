@@ -345,7 +345,16 @@ export function useAuthorization() {
       return result.redirect_uri
     },
     onSuccess: (redirectUri) => {
-      // Redirect back to client
+      // Check if opened as popup - if so, post message to opener and close
+      if (window.opener && !window.opener.closed) {
+        window.opener.postMessage(
+          { type: 'oauth-callback', redirectUri },
+          '*'
+        )
+        window.close()
+        return
+      }
+      // Otherwise redirect back to client
       window.location.href = redirectUri
     },
     onError: (error) => {
@@ -368,6 +377,16 @@ export function useAuthorization() {
     redirectUrl.searchParams.set('error_description', 'User denied the authorization request')
     if (oauthParams.state) {
       redirectUrl.searchParams.set('state', oauthParams.state)
+    }
+
+    // Check if opened as popup - if so, post message to opener and close
+    if (window.opener && !window.opener.closed) {
+      window.opener.postMessage(
+        { type: 'oauth-callback', redirectUri: redirectUrl.toString(), error: 'access_denied' },
+        '*'
+      )
+      window.close()
+      return
     }
 
     window.location.href = redirectUrl.toString()

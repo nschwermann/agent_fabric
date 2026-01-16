@@ -28,7 +28,7 @@ const sessions = new Map<string, McpSession>()
 /**
  * Create the Express app for the MCP server
  */
-export function createApp(config: { nextAppUrl: string; chainId: number }): Express {
+export function createApp(config: { nextAppUrl: string; chainId: number; mcpPublicUrl: string | null }): Express {
   const app = express()
 
   // Trust proxy headers (for ngrok, load balancers, etc.)
@@ -72,11 +72,29 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
   })
 
   /**
+   * Helper to get the public-facing URL
+   * Priority: MCP_PUBLIC_URL env var > x-forwarded-host header > request host
+   */
+  const getPublicUrl = (req: express.Request): string => {
+    // Use configured public URL if available (for subdomain setup)
+    if (config.mcpPublicUrl) {
+      return config.mcpPublicUrl
+    }
+    // Fall back to forwarded headers (for proxy setup)
+    const forwardedHost = req.get('x-forwarded-host')
+    const forwardedProto = req.get('x-forwarded-proto') || req.protocol
+    if (forwardedHost) {
+      return `${forwardedProto}://${forwardedHost}`
+    }
+    return `${req.protocol}://${req.get('host')}`
+  }
+
+  /**
    * OAuth 2.0 Protected Resource Metadata (RFC 9470)
    * Global endpoint (without slug)
    */
   app.get('/.well-known/oauth-protected-resource', (req, res) => {
-    const mcpServerUrl = `${req.protocol}://${req.get('host')}`
+    const mcpServerUrl = getPublicUrl(req)
     const metadata = {
       resource: mcpServerUrl,
       authorization_servers: [config.nextAppUrl],
@@ -115,7 +133,7 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
   app.get('/mcp/:slug/.well-known/oauth-protected-resource', (req, res) => {
     const slugParam = req.params.slug
     const slug = Array.isArray(slugParam) ? slugParam[0] : slugParam
-    const mcpServerUrl = `${req.protocol}://${req.get('host')}`
+    const mcpServerUrl = getPublicUrl(req)
 
     const metadata = {
       resource: `${mcpServerUrl}/mcp/${slug}`,
@@ -172,7 +190,8 @@ export function createApp(config: { nextAppUrl: string; chainId: number }): Expr
       // MCP OAuth requires WWW-Authenticate header with resource_metadata URL
       // See: https://spec.modelcontextprotocol.io/specification/2025-03-26/basic/authorization/
       // Use slug-specific resource metadata URL so client discovers slug-aware authorization endpoint
-      const resourceMetadataUrl = `${req.protocol}://${req.get('host')}/mcp/${slug}/.well-known/oauth-protected-resource`
+      const publicUrl = getPublicUrl(req)
+      const resourceMetadataUrl = `${publicUrl}/mcp/${slug}/.well-known/oauth-protected-resource`
       res.setHeader('WWW-Authenticate', `Bearer resource_metadata="${resourceMetadataUrl}"`)
       res.status(401).json({
         error: 'unauthorized',
