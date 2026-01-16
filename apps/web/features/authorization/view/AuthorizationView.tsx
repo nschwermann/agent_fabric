@@ -5,6 +5,7 @@ import { useAuthorization } from '../model/useAuthorization'
 import { useAuthorizationFlow } from '../model/useAuthorizationFlow'
 import { AuthorizationLoading } from './AuthorizationLoading'
 import { AuthorizationError } from './AuthorizationError'
+import { AuthorizationSuccess } from './AuthorizationSuccess'
 import { SmartAccountRequired } from './SmartAccountRequired'
 import { ClientInfoHeader } from './ClientInfoHeader'
 import { ScopeSelector } from './ScopeSelector'
@@ -52,6 +53,11 @@ export function AuthorizationView() {
   // Loading state
   if (step === 'loading') {
     return <AuthorizationLoading />
+  }
+
+  // Completed state - authorization was successful
+  if (step === 'completed') {
+    return <AuthorizationSuccess />
   }
 
   // Error state

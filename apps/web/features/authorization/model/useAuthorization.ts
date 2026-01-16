@@ -185,6 +185,7 @@ export function useAuthorization() {
     scopeParams: {},
   })
   const [approveError, setApproveError] = useState<string | null>(null)
+  const [isCompleted, setIsCompleted] = useState(false)
 
   // Fetch client info
   const {
@@ -345,6 +346,9 @@ export function useAuthorization() {
       return result.redirect_uri
     },
     onSuccess: (redirectUri) => {
+      // Mark as completed - this shows the success screen
+      setIsCompleted(true)
+
       // Check if opened as popup - if so, post message to opener and close
       if (window.opener && !window.opener.closed) {
         window.opener.postMessage(
@@ -355,6 +359,7 @@ export function useAuthorization() {
         return
       }
       // Otherwise redirect back to client
+      // The success screen will be shown while this redirect is processing
       window.location.href = redirectUri
     },
     onError: (error) => {
@@ -415,6 +420,7 @@ export function useAuthorization() {
     clientInfo,
     isLoading,
     error,
+    isCompleted,
 
     // OAuth params
     oauthParams,

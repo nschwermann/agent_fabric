@@ -8,7 +8,7 @@ import type { UseAuthorizationReturn } from './useAuthorization'
 /**
  * Authorization flow steps
  */
-export type AuthorizationStep = 'loading' | 'error' | 'smartAccountRequired' | 'ready'
+export type AuthorizationStep = 'loading' | 'error' | 'smartAccountRequired' | 'ready' | 'completed'
 
 /**
  * Parameters for the authorization flow hook
@@ -54,6 +54,11 @@ export function useAuthorizationFlow(
 
   // Determine current step based on authorization state
   const step: AuthorizationStep = useMemo(() => {
+    // Completed state - authorization was successful
+    if (authorization.isCompleted) {
+      return 'completed'
+    }
+
     // Loading state - waiting for client info
     if (authorization.isLoading) {
       return 'loading'
@@ -77,6 +82,7 @@ export function useAuthorizationFlow(
     // Ready for user to authorize
     return 'ready'
   }, [
+    authorization.isCompleted,
     authorization.isLoading,
     authorization.error,
     authorization.isSmartAccountEnabled,
