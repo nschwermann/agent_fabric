@@ -2,9 +2,14 @@ import express, { Request, Response, NextFunction, Express } from 'express'
 import cors from 'cors'
 import { randomUUID } from 'crypto'
 import { IncomingMessage, ServerResponse } from 'http'
+import path from 'path'
+import { fileURLToPath } from 'url'
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import { StreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/streamableHttp.js'
 import { z } from 'zod'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = path.dirname(__filename)
 
 import { validateBearerToken, type AuthContext } from './auth/oauth.js'
 import { toolRegistry, type McpServerConfig } from './tools/registry.js'
@@ -45,6 +50,9 @@ export function createApp(config: { nextAppUrl: string; chainId: number; mcpPubl
 
   // Parse JSON bodies
   app.use(express.json())
+
+  // Serve favicon
+  app.use('/favicon.ico', express.static(path.join(__dirname, '../public/favicon.ico')))
 
   // Health check endpoint
   app.get('/health', (_req, res) => {
@@ -116,6 +124,8 @@ export function createApp(config: { nextAppUrl: string; chainId: number; mcpPubl
       issuer: config.nextAppUrl,
       authorization_endpoint: `${config.nextAppUrl}/authorize?mcp_slug=${encodeURIComponent(slug)}`,
       token_endpoint: `${config.nextAppUrl}/api/oauth/token`,
+      // Include registration_endpoint with mcp_slug so clients register with correct slug binding
+      registration_endpoint: `${config.nextAppUrl}/api/oauth/register?mcp_slug=${encodeURIComponent(slug)}`,
       response_types_supported: ['code'],
       grant_types_supported: ['authorization_code'],
       code_challenge_methods_supported: ['S256'],
@@ -127,8 +137,8 @@ export function createApp(config: { nextAppUrl: string; chainId: number; mcpPubl
 
   /**
    * Slug-specific OAuth 2.0 Protected Resource Metadata (RFC 9470)
-   * Returns slug-specific resource identifier
-   * Points to the slug-aware OAuth endpoint on Next.js
+   * Returns slug-specific resource identifier and points clients to
+   * this MCP server's own OAuth discovery endpoint for proper slug handling
    */
   app.get('/mcp/:slug/.well-known/oauth-protected-resource', (req, res) => {
     const slugParam = req.params.slug
@@ -137,10 +147,10 @@ export function createApp(config: { nextAppUrl: string; chainId: number; mcpPubl
 
     const metadata = {
       resource: `${mcpServerUrl}/mcp/${slug}`,
-      // Point to slug-aware OAuth discovery endpoint on Next.js
-      // The SDK will fetch {auth_server}/.well-known/oauth-authorization-server
-      // which maps to /oauth/:slug/.well-known/oauth-authorization-server on Next.js
-      authorization_servers: [`${config.nextAppUrl}/oauth/${encodeURIComponent(slug)}`],
+      // Point to MCP server's own slug-aware OAuth discovery endpoint
+      // Clients will fetch {auth_server}/.well-known/oauth-authorization-server
+      // which returns metadata with mcp_slug in authorization_endpoint and registration_endpoint
+      authorization_servers: [`${mcpServerUrl}/mcp/${slug}`],
       scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
       bearer_methods_supported: ['header'],
     }

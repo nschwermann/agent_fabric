@@ -1,4 +1,5 @@
 import { defineConfig } from 'tsup'
+import { copyFileSync, mkdirSync } from 'fs'
 
 export default defineConfig({
   entry: ['src/index.ts'],
@@ -11,4 +12,9 @@ export default defineConfig({
   // Bundle local source files to handle ESM resolution
   // External dependencies stay external (installed via node_modules)
   bundle: true,
+  onSuccess: async () => {
+    // Copy public assets to dist
+    mkdirSync('dist/public', { recursive: true })
+    copyFileSync('public/favicon.ico', 'dist/public/favicon.ico')
+  },
 })
