@@ -80,6 +80,56 @@ export function createApp(config: { nextAppUrl: string; chainId: number; mcpPubl
   })
 
   /**
+   * OAuth 2.0 Authorization Server Metadata (RFC 8414) - Catch-all for path-based discovery
+   *
+   * Per RFC 8414, when authorization_servers contains "https://example.com/mcp/slug",
+   * clients fetch metadata from "https://example.com/.well-known/oauth-authorization-server/mcp/slug"
+   *
+   * This handles paths like: /.well-known/oauth-authorization-server/mcp/schwiz
+   */
+  app.get('/.well-known/oauth-authorization-server/*path', (req, res) => {
+    // Extract the path after /.well-known/oauth-authorization-server/
+    // Express returns wildcard params as an array
+    const pathParts = req.params.path as unknown as string[]
+    const fullPath = Array.isArray(pathParts) ? pathParts.join('/') : (pathParts || '')
+
+    // Try to extract slug from path (e.g., "mcp/schwiz" -> "schwiz")
+    const match = fullPath.match(/^mcp\/([^\/]+)/)
+    const slug = match ? match[1] : null
+
+    if (slug) {
+      // Return slug-aware metadata
+      const metadata = {
+        issuer: config.nextAppUrl,
+        authorization_endpoint: `${config.nextAppUrl}/authorize?mcp_slug=${encodeURIComponent(slug)}`,
+        token_endpoint: `${config.nextAppUrl}/api/oauth/token`,
+        registration_endpoint: `${config.nextAppUrl}/api/oauth/register?mcp_slug=${encodeURIComponent(slug)}`,
+        response_types_supported: ['code'],
+        grant_types_supported: ['authorization_code'],
+        code_challenge_methods_supported: ['S256'],
+        scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
+        token_endpoint_auth_methods_supported: ['client_secret_post'],
+      }
+      console.log(`[.well-known/oauth-authorization-server/${fullPath}] Returning metadata with mcp_slug:`, slug)
+      res.json(metadata)
+    } else {
+      // Return generic metadata for unrecognized paths
+      const metadata = {
+        issuer: config.nextAppUrl,
+        authorization_endpoint: `${config.nextAppUrl}/authorize`,
+        token_endpoint: `${config.nextAppUrl}/api/oauth/token`,
+        registration_endpoint: `${config.nextAppUrl}/api/oauth/register`,
+        response_types_supported: ['code'],
+        grant_types_supported: ['authorization_code'],
+        code_challenge_methods_supported: ['S256'],
+        scopes_supported: ['x402:payments', 'mcp:tools', 'workflow:token-approvals'],
+        token_endpoint_auth_methods_supported: ['client_secret_post'],
+      }
+      res.json(metadata)
+    }
+  })
+
+  /**
    * Helper to get the public-facing URL
    * Priority: MCP_PUBLIC_URL env var > x-forwarded-host header > request host
    */
