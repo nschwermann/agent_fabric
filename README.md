@@ -246,5 +246,11 @@ MIT
 ## Links
 
 - Website: https://agentfabric.tools
-- Demo: *(link once recorded)*
+- Demo: https://www.youtube.com/watch?v=xfvH6TqvJd8
 - Hackathon Submission: https://dorahacks.io/hackathon/cronos-x402/buidl
+
+### Source Code
+
+- [Smart Account & Session Keys](https://github.com/nschwermann/agent_fabric/tree/main/hardhat) — ERC-7702 delegation contracts with scoped permissions
+- [x402 Proxies & Workflows](https://github.com/nschwermann/agent_fabric/tree/main/apps/web) — Next.js app for API proxies, workflows, and marketplace
+- [MCP Server](https://github.com/nschwermann/agent_fabric/tree/main/apps/mcp-server) — Express server exposing tools and workflows via MCP protocol
