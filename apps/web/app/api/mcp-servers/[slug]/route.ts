@@ -83,9 +83,9 @@ export async function GET(request: NextRequest, { params }: RouteParams) {
       .where(and(eq(mcpServerWorkflows.mcpServerId, mcpServer.id), eq(mcpServerWorkflows.isEnabled, true)))
       .orderBy(asc(mcpServerWorkflows.displayOrder))
 
-    // Build connection URL
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.nextUrl.origin
-    const connectionUrl = `${baseUrl}/mcp/${mcpServer.slug}`
+    // Build connection URL (MCP server runs on subdomain)
+    const mcpBaseUrl = process.env.MCP_PUBLIC_URL || 'http://localhost:3001'
+    const connectionUrl = `${mcpBaseUrl}/mcp/${mcpServer.slug}`
 
     return NextResponse.json({
       server: {

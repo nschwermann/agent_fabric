@@ -75,9 +75,9 @@ export function HeroSection() {
                   <ArrowRight className="size-5" />
                 </Button>
               </a>
-              <Link href="https://github.com/nschwermann/agent_fabric" target="_blank" rel="noopener noreferrer">
+              <Link href="https://www.youtube.com/watch?v=xfvH6TqvJd8" target="_blank" rel="noopener noreferrer">
                 <Button size="lg" variant="outline" className="gap-2 text-base px-8">
-                  Read the Docs
+                  Watch Demo
                 </Button>
               </Link>
             </div>
