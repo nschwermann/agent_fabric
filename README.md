@@ -247,7 +247,7 @@ MIT
 
 - Website: https://agentfabric.tools
 - Demo: https://www.youtube.com/watch?v=xfvH6TqvJd8
-- Hackathon Submission: https://dorahacks.io/hackathon/cronos-x402/buidl
+- Hackathon Submission: https://dorahacks.io/buidl/38376
 
 ### Source Code
 
